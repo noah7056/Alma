@@ -513,6 +513,39 @@ function attachWebviewEvents(tab: Tab) {
   });
 }
 
+function receiveTabFromWindow(payload: any, insertBeforeTabId?: number) {
+  const url = payload?.url || HOME_URL;
+  const title = payload?.title || friendlyTabTitle(url);
+  const fromWindowId = payload?.sourceWindowId as number | null;
+  const fromTabId = payload?.tabId as number | undefined;
+
+  const newTab = createTab(HOME_URL, false);
+  newTab.title = title;
+  updateTabUI(newTab);
+
+  // Insert before a specific tab if requested
+  if (insertBeforeTabId != null) {
+    const targetIdx = tabs.findIndex((t) => t.id === insertBeforeTabId);
+    const newIdx = tabs.indexOf(newTab);
+    if (targetIdx !== -1 && newIdx !== -1 && newIdx !== targetIdx) {
+      const [m] = tabs.splice(newIdx, 1);
+      tabs.splice(targetIdx, 0, m);
+      if (tabsContainer) tabs.forEach((t) => tabsContainer!.appendChild(t.element));
+    }
+  }
+
+  switchTab(newTab.id);
+  if (!isHomeUrl(url) && !isHistoryUrl(url) && !isFavoritesUrl(url)) {
+    navigateTab(newTab, url);
+  }
+  persistTabs();
+
+  // Remove the tab from the source window
+  if (fromWindowId != null && fromTabId != null && almaAPI) {
+    void almaAPI.removeTabInWindow(fromWindowId, fromTabId);
+  }
+}
+
 function createTab(initialUrl: string = HOME_URL, makeActive: boolean = true): Tab {
   const id = nextTabId++;
   const wv = document.createElement("webview") as any;
@@ -559,49 +592,44 @@ function createTab(initialUrl: string = HOME_URL, makeActive: boolean = true): T
       sourceWindowId: currentWindowId,
     };
     currentDragPayload = payload;
-    // Use JSON so other windows can read it via onDragStart broadcast
     e.dataTransfer?.setData("text/plain", JSON.stringify(payload));
     element.classList.add("dragging");
     almaAPI?.notifyDragStart(payload);
   });
 
-  element.addEventListener("dragend", async () => {
+  element.addEventListener("dragend", () => {
     element.classList.remove("dragging");
     if (!draggedTabId || draggedTabId !== id) return;
     const capturedId = id;
+    const capturedUrl = (tabs.find((t) => t.id === capturedId)?.url) ?? HOME_URL;
 
-    // If drop was handled inside this window already (reorder), just clean up.
+    draggedTabId = null;
+    almaAPI?.notifyDragEnd();
+    currentDragPayload = null;
+
+    // Same-window drop on tab bar — reorder already handled by drop event
     if (droppedInTabBar) {
-      draggedTabId = null;
-      currentDragPayload = null;
       droppedInTabBar = false;
-      almaAPI?.notifyDragEnd();
       return;
     }
-
-    // Drop happened outside this window — ask main: tearoff or move to other window
-    const tab = tabs.find((t) => t.id === capturedId);
-    const payload = {
-      tabId: capturedId,
-      url: tab?.url ?? HOME_URL,
-      title: tab?.title ?? "New Tab",
-      sourceWindowId: currentWindowId,
-    };
-    try {
-      await almaAPI?.finalizeDrag(payload);
-      // main handles remove-tab on this window via onRemoveTab
-    } catch {
-      // ignore
-    }
-    almaAPI?.notifyDragEnd();
-    draggedTabId = null;
-    currentDragPayload = null;
     droppedInTabBar = false;
+
+    // Wait for any cross-window IPC (removeTabInWindow) to be processed
+    // before deciding whether a tearoff is needed
+    setTimeout(() => {
+      // If the tab was already removed by the target window, nothing to do
+      if (!tabs.some((t) => t.id === capturedId)) return;
+      // Tab still exists: user dropped outside any window → tear off
+      const stillExists = tabs.find((t) => t.id === capturedId);
+      if (!stillExists) return;
+      closeTab(capturedId);
+      // Open a new window with the tab's real URL
+      if (almaAPI) void almaAPI.newWindow(isHomeUrl(capturedUrl) ? undefined : capturedUrl);
+    }, 200);
   });
 
   element.addEventListener("dragover", (e) => {
     e.preventDefault();
-    // Show insertion indicator while hovering
     element.classList.add("drag-over");
   });
 
@@ -616,21 +644,25 @@ function createTab(initialUrl: string = HOME_URL, makeActive: boolean = true): T
     if (dropInProgress) return;
     dropInProgress = true;
     setTimeout(() => { dropInProgress = false; }, 50);
-    droppedInTabBar = true;
-    // Try currentDragPayload first (same process), then parse dataTransfer
+
     let payload: any = currentDragPayload;
     if (!payload) {
       try { payload = JSON.parse(e.dataTransfer?.getData("text/plain") || ""); } catch { return; }
     }
     if (!payload?.tabId) return;
     const fromId = payload.tabId as number;
-    if (fromId === id) return;
-    // Same-window reorder
-    if (payload.sourceWindowId === currentWindowId) {
+    const fromWindowId = payload.sourceWindowId as number | null;
+
+    if (fromWindowId === currentWindowId) {
+      // Same-window reorder
+      if (fromId === id) return;
+      droppedInTabBar = true;
       reorderTabs(fromId, id);
       persistTabs();
+    } else if (fromWindowId != null) {
+      // Cross-window drop: receive tab in this window, remove from source
+      receiveTabFromWindow(payload, id);
     }
-    // Cross-window drop is handled by finalizeDrag in main process
   });
 
   element.addEventListener("click", () => {
@@ -1219,8 +1251,7 @@ if (tabsContainer) {
     if (dropInProgress) return;
     dropInProgress = true;
     setTimeout(() => { dropInProgress = false; }, 50);
-    dragHandled = true;
-    droppedInTabBar = true;
+
     let payload: any = currentDragPayload;
     if (!payload) {
       try {
@@ -1230,10 +1261,18 @@ if (tabsContainer) {
       }
     }
     if (!payload || !payload.url) return;
-    if (payload.sourceWindowId !== currentWindowId) return;
-    const lastTab = tabs[tabs.length - 1];
-    if (lastTab && payload.tabId !== lastTab.id) reorderTabs(payload.tabId, lastTab.id);
-    persistTabs();
+    const fromWindowId = payload.sourceWindowId as number | null;
+
+    if (fromWindowId === currentWindowId) {
+      // Same-window drop on empty tab bar area → reorder to end
+      droppedInTabBar = true;
+      const lastTab = tabs[tabs.length - 1];
+      if (lastTab && payload.tabId !== lastTab.id) reorderTabs(payload.tabId, lastTab.id);
+      persistTabs();
+    } else if (fromWindowId != null) {
+      // Cross-window drop on tab bar gap → receive at end
+      receiveTabFromWindow(payload);
+    }
   });
 
   tabsContainer.addEventListener("contextmenu", (e) => {

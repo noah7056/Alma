@@ -67,7 +67,12 @@ function createWindow(tabId?: number, initialURL?: string, isNewWindow?: boolean
 }
 
 ipcMain.handle("browser:new-window", (_, url?: string) => {
-  const win = createWindow(undefined, url || HOME_URL, true);
+  const win = createWindow(undefined, undefined, true); // fresh window, no session restore
+  if (url && url !== HOME_URL) {
+    win.webContents.once("did-finish-load", () => {
+      win.webContents.send("browser:navigate-to", url);
+    });
+  }
   return { id: win.webContents.id };
 });
 
@@ -283,7 +288,12 @@ ipcMain.handle("browser:finalize-drag", async (event, payload: any) => {
 
   // tear off: new window navigated to the dragged tab's URL
   const tearoffUrl = payload?.url && payload.url !== HOME_URL ? payload.url : undefined;
-  const win = createWindow(undefined, tearoffUrl, tearoffUrl ? false : true);
+  const win = createWindow(undefined, undefined, true);
+  if (tearoffUrl) {
+    win.webContents.once("did-finish-load", () => {
+      win.webContents.send("browser:navigate-to", tearoffUrl);
+    });
+  }
   if (sourceWindow && !sourceWindow.isDestroyed()) {
     sourceWindow.webContents.send("browser:remove-tab", payload?.tabId);
   }
