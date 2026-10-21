@@ -281,8 +281,9 @@ ipcMain.handle("browser:finalize-drag", async (event, payload: any) => {
     return { success: true, action: "move" };
   }
 
-  // tear off: new window
-  const win = createWindow(undefined, payload?.url || HOME_URL, true);
+  // tear off: new window navigated to the dragged tab's URL
+  const tearoffUrl = payload?.url && payload.url !== HOME_URL ? payload.url : undefined;
+  const win = createWindow(undefined, tearoffUrl, tearoffUrl ? false : true);
   if (sourceWindow && !sourceWindow.isDestroyed()) {
     sourceWindow.webContents.send("browser:remove-tab", payload?.tabId);
   }

@@ -568,28 +568,35 @@ function createTab(initialUrl: string = HOME_URL, makeActive: boolean = true): T
   element.addEventListener("dragend", async () => {
     element.classList.remove("dragging");
     if (!draggedTabId || draggedTabId !== id) return;
-    const tab = tabs.find((t) => t.id === id);
+    const capturedId = id;
+
+    // If drop was handled inside this window already (reorder), just clean up.
+    if (droppedInTabBar) {
+      draggedTabId = null;
+      currentDragPayload = null;
+      droppedInTabBar = false;
+      almaAPI?.notifyDragEnd();
+      return;
+    }
+
+    // Drop happened outside this window — ask main: tearoff or move to other window
+    const tab = tabs.find((t) => t.id === capturedId);
     const payload = {
-      tabId: id,
+      tabId: capturedId,
       url: tab?.url ?? HOME_URL,
       title: tab?.title ?? "New Tab",
       sourceWindowId: currentWindowId,
     };
-    // Ask main process: did cursor land on another window's tab bar, or outside?
     try {
-      const result = await almaAPI?.finalizeDrag(payload);
-      // "move"    → main already called __almaReceiveTab on target + remove-tab on us
-      // "tearoff" → main opened a new window + remove-tab on us
-      // undefined → dropped back in same window (reorder already handled by drop event)
-      if (!result || result.action === "tearoff" || result.action === "move") {
-        // main handles tab removal via onRemoveTab; nothing more needed here
-      }
+      await almaAPI?.finalizeDrag(payload);
+      // main handles remove-tab on this window via onRemoveTab
     } catch {
       // ignore
     }
     almaAPI?.notifyDragEnd();
     draggedTabId = null;
     currentDragPayload = null;
+    droppedInTabBar = false;
   });
 
   element.addEventListener("dragover", (e) => {
@@ -1917,8 +1924,9 @@ if (almaAPI?.onDragHandled) {
 
 
 (window as any).__almaReceiveTab = (payload: any, targetTabId: number | null) => {
-  const newTab = createTab(payload?.url || HOME_URL, false);
-  newTab.title = friendlyTabTitle(payload?.url || HOME_URL);
+  const url = payload?.url || HOME_URL;
+  const newTab = createTab(HOME_URL, false);
+  newTab.title = payload?.title || friendlyTabTitle(url);
   updateTabUI(newTab);
   if (targetTabId) {
     const idx = tabs.indexOf(newTab);
@@ -1932,6 +1940,10 @@ if (almaAPI?.onDragHandled) {
     }
   }
   switchTab(newTab.id);
+  // Navigate to the actual URL (not home) after switching
+  if (!isHomeUrl(url) && !isHistoryUrl(url) && !isFavoritesUrl(url)) {
+    navigateTab(newTab, url);
+  }
   persistTabs();
   return true;
 };
