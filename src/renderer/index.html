@@ -52,6 +52,7 @@
           <input type="text" id="home-search" placeholder="Search or type a URL..." spellcheck="false" />
           <button id="home-go" aria-label="Go"><img class="home-go-icon" src="assets/icons/search.svg" alt="Go" /></button>
         </div>
+        <div id="home-shortcuts" class="home-shortcuts"></div>
       </div>
     </div>
     <div id="history-view" class="home-view history-view" style="display:none;">
@@ -142,6 +143,28 @@
         <button class="lang-option themes-mode" data-lang="en"     style="text-align:left;padding:0 14px;">English</button>
         <button class="lang-option themes-mode" data-lang="it"     style="text-align:left;padding:0 14px;">Italiano</button>
         <button class="lang-option themes-mode" data-lang="zh"     style="text-align:left;padding:0 14px;">中文</button>
+      </div>
+    </div>
+  </div>
+  <div id="shortcut-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span class="modal-title" id="shortcut-modal-title">Add shortcut</span>
+        <button id="close-shortcut-modal" class="themes-close" aria-label="Close">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-field">
+          <label for="shortcut-name-input" id="shortcut-name-label">Name</label>
+          <input type="text" id="shortcut-name-input" class="modal-input" placeholder="e.g. YouTube" spellcheck="false" autocomplete="off" />
+        </div>
+        <div class="modal-field">
+          <label for="shortcut-url-input" id="shortcut-url-label">Link</label>
+          <input type="text" id="shortcut-url-input" class="modal-input" placeholder="e.g. youtube.com" spellcheck="false" autocomplete="off" />
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="cancel-shortcut-btn" class="modal-btn secondary">Cancel</button>
+        <button id="confirm-shortcut-btn" class="modal-btn primary">Add</button>
       </div>
     </div>
   </div>

@@ -17,6 +17,8 @@ const _en = {
   historyTitle: "History", clearHistory: "Clear history",
   clearFavorites: "Clear favorites", subtitle: "Your personal browser",
   languageTitle: "Language", systemLanguage: "System (auto)", remove: "Remove",
+  addShortcut: "Add shortcut", shortcutName: "Name", shortcutLink: "Link",
+  cancel: "Cancel", confirm: "Add",
 };
 const _it: Locale = {
   back: "Indietro", forward: "Avanti", reload: "Ricarica", home: "Home",
@@ -32,6 +34,8 @@ const _it: Locale = {
   historyTitle: "Cronologia", clearHistory: "Cancella cronologia",
   clearFavorites: "Cancella preferiti", subtitle: "Il tuo browser personale",
   languageTitle: "Lingua", systemLanguage: "Sistema (automatico)", remove: "Rimuovi",
+  addShortcut: "Aggiungi", shortcutName: "Nome", shortcutLink: "Link",
+  cancel: "Annulla", confirm: "Aggiungi",
 };
 const _zh: Locale = {
   back: "返回", forward: "前进", reload: "刷新", home: "主页",
@@ -47,6 +51,8 @@ const _zh: Locale = {
   historyTitle: "历史记录", clearHistory: "清除历史记录",
   clearFavorites: "清除收藏", subtitle: "您的个人浏览器",
   languageTitle: "语言", systemLanguage: "系统（自动）", remove: "删除",
+  addShortcut: "添加快捷方式", shortcutName: "名称", shortcutLink: "链接",
+  cancel: "取消", confirm: "添加",
 };
 const _locales: Record<LangCode, Locale> = { en: _en, it: _it, zh: _zh };
 
@@ -137,6 +143,14 @@ function applyLocale(): void {
     ["home", t.home], ["new-window", t.newWindow], ["new-tab", t.newTab],
   ];
   ariaMap.forEach(([id, label]) => document.getElementById(id)?.setAttribute("aria-label", label));
+
+  // Shortcut modal
+  setText("#shortcut-modal-title", t.addShortcut);
+  setText("#shortcut-name-label", t.shortcutName);
+  setText("#shortcut-url-label", t.shortcutLink);
+  setText("#cancel-shortcut-btn", t.cancel);
+  setText("#confirm-shortcut-btn", t.confirm);
+  renderShortcuts();
 
   // Language option active highlight
   document.querySelectorAll<HTMLButtonElement>(".lang-option").forEach(btn => {
@@ -1395,6 +1409,265 @@ function goHomeSearch() {
 if (homeGo) homeGo.addEventListener("click", goHomeSearch);
 if (homeSearch) homeSearch.addEventListener("keydown", (e) => { if (e.key === "Enter") goHomeSearch(); });
 
+// ---- Home Shortcuts ----
+interface ShortcutItem {
+  name: string;
+  url: string;
+}
+
+const SHORTCUTS_STORAGE_KEY = "alma:shortcuts";
+
+function loadShortcuts(): ShortcutItem[] {
+  try {
+    const raw = localStorage.getItem(SHORTCUTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.slice(0, 6) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveShortcuts(list: ShortcutItem[]): void {
+  localStorage.setItem(SHORTCUTS_STORAGE_KEY, JSON.stringify(list.slice(0, 6)));
+}
+
+function extractDomain(urlStr: string): string {
+  try {
+    let u = urlStr.trim();
+    if (!/^https?:\/\//i.test(u)) u = "https://" + u;
+    const parsed = new URL(u);
+    return parsed.hostname.replace(/^www\./, "");
+  } catch {
+    return urlStr.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] || urlStr;
+  }
+}
+
+function getFaviconUrl(urlStr: string): string {
+  const domain = extractDomain(urlStr);
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
+}
+
+function renderShortcuts(): void {
+  const containers = document.querySelectorAll<HTMLElement>(".home-shortcuts");
+  if (!containers.length) return;
+  const shortcuts = loadShortcuts();
+
+  containers.forEach((container) => {
+    container.innerHTML = "";
+
+    // 1. Existing shortcuts
+    shortcuts.forEach((sc, idx) => {
+      const item = document.createElement("div");
+      item.className = "shortcut-item";
+      item.dataset.index = String(idx);
+      item.dataset.url = sc.url;
+      item.title = `${sc.name} (${sc.url})`;
+
+      // Delete button on corner
+      const delBtn = document.createElement("button");
+      delBtn.className = "shortcut-delete";
+      delBtn.setAttribute("aria-label", "Delete shortcut");
+      delBtn.setAttribute("title", "Delete");
+      delBtn.textContent = "×";
+      item.appendChild(delBtn);
+
+      // Icon container
+      const iconWrapper = document.createElement("div");
+      iconWrapper.className = "shortcut-icon-wrapper";
+
+      const img = document.createElement("img");
+      img.className = "shortcut-icon";
+      img.src = getFaviconUrl(sc.url);
+      img.alt = "";
+
+      const fallback = document.createElement("span");
+      fallback.className = "shortcut-icon-fallback";
+      fallback.style.display = "none";
+      const initial = (sc.name[0] || extractDomain(sc.url)[0] || "?").toUpperCase();
+      fallback.textContent = initial;
+
+      img.onerror = () => {
+        img.style.display = "none";
+        fallback.style.display = "block";
+      };
+
+      iconWrapper.appendChild(img);
+      iconWrapper.appendChild(fallback);
+      item.appendChild(iconWrapper);
+
+      // Name
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "shortcut-name";
+      nameSpan.textContent = sc.name;
+      item.appendChild(nameSpan);
+
+      container.appendChild(item);
+    });
+
+    // 2. "+" placeholder if fewer than 6
+    if (shortcuts.length < 6) {
+      const addBtn = document.createElement("button");
+      addBtn.className = "shortcut-item shortcut-add";
+      addBtn.id = "add-shortcut-btn";
+      const labelText = t.addShortcut || "Add shortcut";
+      addBtn.setAttribute("aria-label", labelText);
+      addBtn.setAttribute("title", labelText);
+
+      const iconWrapper = document.createElement("div");
+      iconWrapper.className = "shortcut-icon-wrapper";
+
+      const plus = document.createElement("span");
+      plus.className = "shortcut-add-plus";
+      plus.textContent = "+";
+      iconWrapper.appendChild(plus);
+      addBtn.appendChild(iconWrapper);
+
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "shortcut-name";
+      nameSpan.textContent = labelText;
+      addBtn.appendChild(nameSpan);
+
+      container.appendChild(addBtn);
+    }
+  });
+}
+
+// Modal elements
+const shortcutModal = document.getElementById("shortcut-modal");
+const shortcutNameInput = document.getElementById("shortcut-name-input") as HTMLInputElement | null;
+const shortcutUrlInput = document.getElementById("shortcut-url-input") as HTMLInputElement | null;
+const cancelShortcutBtn = document.getElementById("cancel-shortcut-btn");
+const confirmShortcutBtn = document.getElementById("confirm-shortcut-btn");
+const closeShortcutModalBtn = document.getElementById("close-shortcut-modal");
+
+function openShortcutModal(): void {
+  if (!shortcutModal) return;
+  if (shortcutNameInput) shortcutNameInput.value = "";
+  if (shortcutUrlInput) shortcutUrlInput.value = "";
+  shortcutModal.style.display = "flex";
+  setTimeout(() => {
+    shortcutUrlInput?.focus();
+  }, 60);
+}
+
+function closeShortcutModal(): void {
+  if (!shortcutModal) return;
+  shortcutModal.style.display = "none";
+}
+
+function handleAddShortcut(): void {
+  const rawUrl = shortcutUrlInput?.value.trim() || "";
+  let rawName = shortcutNameInput?.value.trim() || "";
+
+  if (!rawUrl) {
+    shortcutUrlInput?.focus();
+    return;
+  }
+
+  let formattedUrl = rawUrl;
+  if (!/^(https?|view-source):\/\//i.test(formattedUrl)) {
+    formattedUrl = `https://${formattedUrl}`;
+  }
+
+  if (!rawName) {
+    try {
+      const u = new URL(formattedUrl);
+      const hostPart = u.hostname.replace(/^www\./, "").split(".")[0];
+      rawName = hostPart ? hostPart.charAt(0).toUpperCase() + hostPart.slice(1) : extractDomain(formattedUrl);
+    } catch {
+      rawName = extractDomain(formattedUrl);
+    }
+  }
+
+  const list = loadShortcuts();
+  if (list.length < 6) {
+    list.push({ name: rawName, url: formattedUrl });
+    saveShortcuts(list);
+    renderShortcuts();
+  }
+  closeShortcutModal();
+}
+
+if (cancelShortcutBtn) cancelShortcutBtn.addEventListener("click", closeShortcutModal);
+if (closeShortcutModalBtn) closeShortcutModalBtn.addEventListener("click", closeShortcutModal);
+if (confirmShortcutBtn) confirmShortcutBtn.addEventListener("click", handleAddShortcut);
+
+if (shortcutModal) {
+  shortcutModal.addEventListener("click", (e) => {
+    if (e.target === shortcutModal) {
+      closeShortcutModal();
+    }
+  });
+}
+
+[shortcutNameInput, shortcutUrlInput].forEach((inp) => {
+  inp?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleAddShortcut();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      closeShortcutModal();
+    }
+  });
+});
+
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && shortcutModal && shortcutModal.style.display !== "none") {
+    closeShortcutModal();
+  }
+});
+
+// Delegated click handling on webviewContainer
+if (webviewContainer) {
+  webviewContainer.addEventListener("click", (e) => {
+    const target = e.target as HTMLElement;
+
+    // Delete button clicked
+    const delBtn = target.closest<HTMLButtonElement>(".shortcut-delete");
+    if (delBtn) {
+      e.stopPropagation();
+      e.preventDefault();
+      const item = delBtn.closest<HTMLElement>(".shortcut-item");
+      if (item && item.dataset.index !== undefined) {
+        const idx = parseInt(item.dataset.index, 10);
+        const list = loadShortcuts();
+        if (!isNaN(idx) && idx >= 0 && idx < list.length) {
+          list.splice(idx, 1);
+          saveShortcuts(list);
+          renderShortcuts();
+        }
+      }
+      return;
+    }
+
+    // Add button clicked
+    const addBtn = target.closest<HTMLElement>(".shortcut-add");
+    if (addBtn) {
+      e.stopPropagation();
+      e.preventDefault();
+      openShortcutModal();
+      return;
+    }
+
+    // Shortcut item clicked (navigate in same tab)
+    const shortcutItem = target.closest<HTMLElement>(".shortcut-item");
+    if (shortcutItem && shortcutItem.dataset.url) {
+      e.stopPropagation();
+      e.preventDefault();
+      const isRightPane = !!shortcutItem.closest("#home-view-right");
+      if (splitMode && isRightPane) {
+        const rightTab = tabs.find((t) => t.id === rightTabId);
+        if (rightTab) navigateTab(rightTab, resolveURL(shortcutItem.dataset.url));
+      } else {
+        navigateTo(resolveURL(shortcutItem.dataset.url));
+      }
+      return;
+    }
+  });
+}
+
 if (almaAPI?.getWindowId) {
   currentWindowId = almaAPI.getWindowId();
 }
@@ -1436,6 +1709,7 @@ function getHomeViewRight(): HTMLElement {
       if (e.key === "Enter") doGo();
     });
     if (webviewContainer) webviewContainer.appendChild(homeViewRight);
+    renderShortcuts();
   }
   return homeViewRight!;
 }
