@@ -83,6 +83,7 @@
     <button id="theme-toggle" class="settings-btn">Themes</button>
     <button id="favorites-toggle" class="settings-btn" data-open-favorites="true"><span id="open-favorites">Favorites</span></button>
     <button id="restore-session" class="settings-btn">Restore session on launch: On</button>
+    <button id="lang-settings-btn" class="settings-btn">Language</button>
   </div>
   <div id="themes-panel" class="themes-panel" style="display:none;">
     <div class="themes-header">
@@ -127,6 +128,21 @@
     <div id="favorites-list" class="history-list"></div>
     <div style="margin-top:12px;text-align:center;">
       <button id="open-favorites-page" class="settings-btn">Open favorites page</button>
+    </div>
+  </div>
+  <div id="language-panel" class="themes-panel" style="display:none;">
+    <div class="themes-header">
+      <span class="themes-title">Language</span>
+      <button id="close-language" class="themes-close" aria-label="Close">&#10005;</button>
+    </div>
+    <div class="themes-section">
+      <div class="themes-label">Language</div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <button class="lang-option themes-mode" data-lang="system" style="text-align:left;padding:0 14px;">System (auto)</button>
+        <button class="lang-option themes-mode" data-lang="en"     style="text-align:left;padding:0 14px;">English</button>
+        <button class="lang-option themes-mode" data-lang="it"     style="text-align:left;padding:0 14px;">Italiano</button>
+        <button class="lang-option themes-mode" data-lang="zh"     style="text-align:left;padding:0 14px;">中文</button>
+      </div>
     </div>
   </div>
   <script type="module" src="renderer.js"></script>

@@ -1,3 +1,89 @@
+import { resolveLocale, saveLang, getSavedLang, LANG_NAMES, locales, type LangCode, type LangSetting } from "./locales/index";
+
+// ---- i18n ----
+let { locale: t } = resolveLocale();
+
+function applyLocale(): void {
+  ({ locale: t } = resolveLocale());
+
+  const saved = getSavedLang();
+
+  // Address / search placeholders
+  (document.getElementById("address") as HTMLInputElement | null)
+    ?.setAttribute("placeholder", t.searchOrUrl);
+  (document.getElementById("home-search") as HTMLInputElement | null)
+    ?.setAttribute("placeholder", t.searchOrUrl);
+
+  // Home subtitle
+  const sub = document.querySelector<HTMLElement>("#home-view .alma-subtitle");
+  if (sub) sub.textContent = t.subtitle;
+
+  // Settings panel buttons
+  const elMap: [string, string][] = [
+    ["open-history",       t.history],
+    ["theme-toggle",       t.themes],
+    ["lang-settings-btn",  t.language],
+  ];
+  elMap.forEach(([id, text]) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  });
+
+  // Favorites label inside settings panel (nested span)
+  const favSpan = document.getElementById("open-favorites");
+  if (favSpan) favSpan.textContent = t.favorites;
+
+  // Restore session button
+  updateRestoreBtn();
+
+  // Themes panel
+  setText("#themes-panel .themes-title", t.themesTitle);
+  setText("#themes-panel .themes-section:nth-child(1) .themes-label", t.mode);
+  setText("#themes-panel .themes-section:nth-child(2) .themes-label", t.accent);
+  setText("#themes-panel .themes-section:nth-child(3) .themes-label", t.homeBackground);
+  setText("#theme-light", t.light);
+  setText("#theme-dark", t.dark);
+
+  // Choose image label (text node only, preserve hidden input)
+  const chooseLabel = document.querySelector<HTMLLabelElement>(".themes-file");
+  if (chooseLabel) {
+    const firstChild = chooseLabel.childNodes[0];
+    if (firstChild?.nodeType === Node.TEXT_NODE) firstChild.textContent = t.chooseImage + "\n";
+  }
+
+  // Favorites panel
+  setText("#favorites-panel .themes-title", t.favoritesTitle);
+  setText("#open-favorites-page", t.openFavoritesPage);
+
+  // History / favorites views
+  setText("#history-view .alma-subtitle", t.historyTitle);
+  setText("#clear-history", t.clearHistory);
+  setText("#favorites-view .alma-subtitle", t.favoritesTitle);
+  setText("#clear-favorites", t.clearFavorites);
+
+  // Language panel
+  setText("#language-panel .themes-title", t.languageTitle);
+
+  // Nav aria-labels
+  const ariaMap: [string, string][] = [
+    ["back", t.back], ["forward", t.forward], ["reload", t.reload],
+    ["home", t.home], ["new-window", t.newWindow], ["new-tab", t.newTab],
+  ];
+  ariaMap.forEach(([id, label]) => document.getElementById(id)?.setAttribute("aria-label", label));
+
+  // Language option active highlight
+  document.querySelectorAll<HTMLButtonElement>(".lang-option").forEach(btn => {
+    const active = btn.dataset.lang === saved;
+    btn.style.fontWeight = active ? "700" : "500";
+    btn.style.background = active ? "color-mix(in srgb, var(--tint) 20%, var(--surface))" : "";
+  });
+}
+
+function setText(selector: string, text: string): void {
+  const el = document.querySelector<HTMLElement>(selector);
+  if (el) el.textContent = text;
+}
+
 const HOME_URL = "home.html";
 const HISTORY_URL = "history.html";
 const FAVORITES_URL = "favorites.html";
@@ -784,7 +870,7 @@ const restoreBtn = document.getElementById("restore-session") as HTMLButtonEleme
 function updateRestoreBtn() {
   if (!restoreBtn) return;
   const on = localStorage.getItem("alma:restoreSession") !== "false";
-  restoreBtn.textContent = "Restore session on launch: " + (on ? "On" : "Off");
+  restoreBtn.textContent = on ? t.restoreSessionOn : t.restoreSessionOff;
 }
 if (restoreBtn) {
   updateRestoreBtn();
@@ -1725,6 +1811,35 @@ if (almaAPI?.onDragHandled) {
 
 renderFavorites();
 updateFavoriteButtons();
+
+// ---- Language panel ----
+const langPanel = document.getElementById("language-panel");
+const langSettingsBtn = document.getElementById("lang-settings-btn");
+const closeLangBtn = document.getElementById("close-language");
+
+if (langSettingsBtn && langPanel) {
+  langSettingsBtn.addEventListener("click", () => {
+    const open = langPanel.style.display === "none";
+    langPanel.style.display = open ? "block" : "none";
+    if (settingsPanel) settingsPanel.style.display = "none";
+    const fp = document.getElementById("favorites-panel");
+    if (fp) fp.style.display = "none";
+    const tp = document.getElementById("themes-panel");
+    if (tp) tp.style.display = "none";
+  });
+}
+if (closeLangBtn && langPanel) {
+  closeLangBtn.addEventListener("click", () => { langPanel.style.display = "none"; });
+}
+document.querySelectorAll<HTMLButtonElement>(".lang-option").forEach(btn => {
+  btn.addEventListener("click", () => {
+    saveLang(btn.dataset.lang as LangSetting);
+    applyLocale();
+  });
+});
+
+// Apply locale on load
+applyLocale();
 
 // Initial restore or clean new window tab
 const urlParams = new URLSearchParams(window.location.search);
