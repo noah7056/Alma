@@ -74,6 +74,8 @@ Alma/
 - [x] History page (local SQLite or JSON log)
 - [ ] Settings: default search engine, homepage, theme
 - [x] Session restore on launch
+- [x] Chrome-like right-click context menus (webview, links, media, text selection, editable fields, tabs, tab strip, address bar)
+- [x] Reopen closed tabs (`Cmd+Shift+T` / `Ctrl+Shift+T`)
 - [ ] Extension-style content scripts via `webview` preloads
 
 ## Running

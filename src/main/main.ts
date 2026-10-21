@@ -1,6 +1,12 @@
 import { app, BrowserWindow, ipcMain, screen, shell } from "electron";
 import path from "node:path";
 import url from "node:url";
+import {
+  registerContextMenuHandlers,
+  showAddressContextMenu,
+  showTabContextMenu,
+  showTabStripContextMenu,
+} from "./context-menu";
 
 const windows = new Map<number, BrowserWindow>();
 let nextTabId = 1;
@@ -280,6 +286,26 @@ ipcMain.handle("browser:finalize-drag", async (event, payload: any) => {
   }
   return { success: true, action: "tearoff" };
 });
+
+ipcMain.on("context-menu:show-tab", (event, options) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) return;
+  showTabContextMenu(win, options);
+});
+
+ipcMain.on("context-menu:show-tab-strip", (event, options) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) return;
+  showTabStripContextMenu(win, options);
+});
+
+ipcMain.on("context-menu:show-address-bar", (event, options) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) return;
+  showAddressContextMenu(win, options);
+});
+
+registerContextMenuHandlers(createWindow);
 
 app.whenReady().then(() => {
   createWindow(undefined, HOME_URL);

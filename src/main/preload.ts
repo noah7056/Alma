@@ -53,6 +53,48 @@ contextBridge.exposeInMainWorld("almaAPI", {
   maximizeWindow: () => ipcRenderer.invoke("window:maximize"),
   closeWindow: () => ipcRenderer.invoke("window:close"),
   isMaximized: () => ipcRenderer.invoke("window:is-maximized"),
+  showTabContextMenu: (data: { tabId: number; canCloseOthers: boolean; canCloseRight: boolean }) => {
+    ipcRenderer.send("context-menu:show-tab", data);
+  },
+  showTabStripContextMenu: (data: { canReopen: boolean }) => {
+    ipcRenderer.send("context-menu:show-tab-strip", data);
+  },
+  showAddressContextMenu: (data?: { hasSelection?: boolean }) => {
+    ipcRenderer.send("context-menu:show-address-bar", data);
+  },
+  onNewTab: (callback: (data: { url: string; makeActive?: boolean; insertAfterTabId?: number }) => void) => {
+    const channel = "browser:new-tab";
+    const handler = (_: unknown, data: { url: string; makeActive?: boolean; insertAfterTabId?: number }) => callback(data);
+    ipcRenderer.on(channel, handler);
+    return () => ipcRenderer.removeAllListeners(channel);
+  },
+  onTabAction: (callback: (action: string, tabId?: number) => void) => {
+    const channels = [
+      "tab-action:new-to-right",
+      "tab-action:reload",
+      "tab-action:duplicate",
+      "tab-action:close",
+      "tab-action:close-others",
+      "tab-action:close-right",
+      "tab-action:new",
+      "tab-action:reopen-closed",
+    ];
+    const handlers = channels.map((channel) => {
+      const action = channel.replace("tab-action:", "");
+      const handler = (_: unknown, tabId?: number) => callback(action, tabId);
+      ipcRenderer.on(channel, handler);
+      return { channel, handler };
+    });
+    return () => {
+      handlers.forEach(({ channel, handler }) => ipcRenderer.removeListener(channel, handler));
+    };
+  },
+  onAddressAction: (callback: (action: string, payload?: any) => void) => {
+    const channel = "address-action:paste-and-go";
+    const handler = (_: unknown, text: string) => callback("paste-and-go", text);
+    ipcRenderer.on(channel, handler);
+    return () => ipcRenderer.removeAllListeners(channel);
+  },
 });
 
 declare global {
@@ -82,6 +124,12 @@ declare global {
     maximizeWindow: () => Promise<{ success: boolean }>;
     closeWindow: () => Promise<{ success: boolean }>;
     isMaximized: () => Promise<boolean>;
+    showTabContextMenu: (data: { tabId: number; canCloseOthers: boolean; canCloseRight: boolean }) => void;
+    showTabStripContextMenu: (data: { canReopen: boolean }) => void;
+    showAddressContextMenu: (data?: { hasSelection?: boolean }) => void;
+    onNewTab: (callback: (data: { url: string; makeActive?: boolean; insertAfterTabId?: number }) => void) => () => void;
+    onTabAction: (callback: (action: string, tabId?: number) => void) => () => void;
+    onAddressAction: (callback: (action: string, payload?: any) => void) => () => void;
   }
   interface Window {
     almaAPI: AlmaAPI;

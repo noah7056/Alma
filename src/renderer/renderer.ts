@@ -407,6 +407,17 @@ function createTab(initialUrl: string = HOME_URL, makeActive: boolean = true): T
     switchTab(id);
   });
 
+  element.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const idx = tabs.findIndex((t) => t.id === id);
+    almaAPI?.showTabContextMenu({
+      tabId: id,
+      canCloseOthers: tabs.length > 1,
+      canCloseRight: idx !== -1 && idx < tabs.length - 1,
+    });
+  });
+
   if (makeActive) {
     switchTab(id);
   }
@@ -468,6 +479,25 @@ function switchTab(id: number) {
   updateFavoriteButtons();
 }
 
+interface ClosedTabRecord {
+  url: string;
+  title: string;
+}
+const recentlyClosedTabs: ClosedTabRecord[] = [];
+
+function recordClosedTab(url: string, title: string) {
+  if (!url || isHomeUrl(url) || url === "about:blank") return;
+  recentlyClosedTabs.unshift({ url, title });
+  if (recentlyClosedTabs.length > 30) recentlyClosedTabs.pop();
+}
+
+function reopenClosedTab() {
+  const last = recentlyClosedTabs.shift();
+  if (last) {
+    createTab(last.url, true);
+  }
+}
+
 function closeTab(id: number) {
   const idx = tabs.findIndex((t) => t.id === id);
   if (idx === -1) return;
@@ -476,6 +506,7 @@ function closeTab(id: number) {
     if (rightTabId === id) rightTabId = tabs.find((t) => t.id !== id)?.id ?? null;
   }
   const tab = tabs[idx];
+  recordClosedTab(tab.url, tab.title);
   tab.webview.remove();
   tab.element.remove();
   tabs.splice(idx, 1);
@@ -488,6 +519,22 @@ function closeTab(id: number) {
     const next = tabs[Math.min(idx, tabs.length - 1)];
     switchTab(next.id);
   }
+  persistTabs();
+}
+
+function insertTabAfter(newTabId: number, afterId: number) {
+  if (newTabId === afterId) return;
+  const fromIndex = tabs.findIndex((t) => t.id === newTabId);
+  const targetIndex = tabs.findIndex((t) => t.id === afterId);
+  if (fromIndex === -1 || targetIndex === -1) return;
+  const [moved] = tabs.splice(fromIndex, 1);
+  const newIndex = fromIndex < targetIndex ? targetIndex : targetIndex + 1;
+  tabs.splice(newIndex, 0, moved);
+  tabs.forEach((t) => {
+    if (tabsContainer) tabsContainer.appendChild(t.element);
+  });
+  const newTabBtn = document.getElementById("new-tab");
+  if (newTabBtn && tabsContainer) tabsContainer.appendChild(newTabBtn);
   persistTabs();
 }
 
@@ -543,7 +590,7 @@ function renderHistory() {
     container.innerHTML = `<div style="padding:12px 0;color:var(--text-secondary);">Nothing yet</div>`;
     return;
   }
-  container.innerHTML = list.map((e) => `<div style="padding:6px 0;border-bottom:1px solid var(--border);"><a href="#" data-url="${e.url}" style="color:#007aff;text-decoration:none;">${e.title}</a><div style="font-size:11px;color:var(--text-secondary);">${new Date(e.time).toLocaleString()}</div></div>`).join("");
+  container.innerHTML = list.map((e) => `<div style="padding:6px 0;border-bottom:1px solid var(--border);"><a href="${e.url}" data-url="${e.url}" style="color:#007aff;text-decoration:none;">${e.title}</a><div style="font-size:11px;color:var(--text-secondary);">${new Date(e.time).toLocaleString()}</div></div>`).join("");
   container.querySelectorAll("a").forEach((a) => {
     a.addEventListener("click", (ev) => {
       ev.preventDefault();
@@ -587,7 +634,7 @@ function renderFavorites() {
       container.innerHTML = `<div style="padding:12px 0;color:var(--text-secondary);">Nothing yet</div>`;
       return;
     }
-    container.innerHTML = favs.map((e) => `<div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px;"><a href="#" data-url="${e.url}" style="color:#007aff;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.title}</a><button data-remove="${e.url}" class="settings-btn" style="width:auto;padding:2px 8px;">Remove</button></div>`).join("");
+    container.innerHTML = favs.map((e) => `<div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px;"><a href="${e.url}" data-url="${e.url}" style="color:#007aff;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.title}</a><button data-remove="${e.url}" class="settings-btn" style="width:auto;padding:2px 8px;">Remove</button></div>`).join("");
     container.querySelectorAll("a").forEach((a) => {
       a.addEventListener("click", (ev) => {
         ev.preventDefault();
@@ -740,7 +787,7 @@ function resolveURL(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return HOME_URL;
   if (trimmed.toLowerCase() === "about:blank") return HOME_URL;
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (/^(https?|view-source):\/\//i.test(trimmed) || trimmed.startsWith("view-source:")) return trimmed;
   if (trimmed.includes(".") && !trimmed.includes(" ")) return `https://${trimmed}`;
   return `https://www.google.com/search?q=${encodeURIComponent(trimmed)}`;
 }
@@ -878,6 +925,13 @@ addressInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") goBtn.click();
 });
 
+addressInput.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  const hasSelection = (addressInput.selectionEnd ?? 0) > (addressInput.selectionStart ?? 0);
+  almaAPI?.showAddressContextMenu({ hasSelection });
+});
+
 newWindowBtn.addEventListener("click", () => {
   try {
     if (almaAPI) void almaAPI.newWindow();
@@ -917,6 +971,20 @@ if (tabsContainer) {
     if (lastTab && payload.tabId !== lastTab.id) reorderTabs(payload.tabId, lastTab.id);
     persistTabs();
   });
+
+  tabsContainer.addEventListener("contextmenu", (e) => {
+    const target = e.target as HTMLElement;
+    if (
+      target === tabsContainer ||
+      target.classList.contains("tab-strip") ||
+      target.id === "tab-strip"
+    ) {
+      e.preventDefault();
+      almaAPI?.showTabStripContextMenu({
+        canReopen: recentlyClosedTabs.length > 0,
+      });
+    }
+  });
 }
 
 if (almaAPI?.onNavigateTo) {
@@ -928,6 +996,80 @@ if (almaAPI?.onNavigateTo) {
     }
   });
 }
+
+if (almaAPI?.onNewTab) {
+  almaAPI.onNewTab((data) => {
+    try {
+      const newTab = createTab(data.url || HOME_URL, data.makeActive ?? true);
+      if (data.insertAfterTabId) {
+        insertTabAfter(newTab.id, data.insertAfterTabId);
+      }
+    } catch (err) {
+      console.error("[alma] onNewTab failed:", err);
+    }
+  });
+}
+
+if (almaAPI?.onTabAction) {
+  almaAPI.onTabAction((action: string, tabId?: number) => {
+    try {
+      if (action === "new") {
+        createTab(HOME_URL, true);
+      } else if (action === "reopen-closed") {
+        reopenClosedTab();
+      } else if (tabId !== undefined) {
+        const tab = tabs.find((t) => t.id === tabId);
+        if (!tab) return;
+        if (action === "close") {
+          closeTab(tabId);
+        } else if (action === "reload") {
+          if (isHomeUrl(tab.url) || isHistoryUrl(tab.url) || isFavoritesUrl(tab.url)) {
+            if (tab.id === activeTabId) navigateTab(tab, tab.url);
+          } else {
+            try {
+              if (typeof tab.webview?.reload === "function") tab.webview.reload();
+            } catch (err) {
+              console.error("[alma] reload tab error:", err);
+            }
+          }
+        } else if (action === "new-to-right") {
+          const newTab = createTab(HOME_URL, true);
+          insertTabAfter(newTab.id, tabId);
+        } else if (action === "duplicate") {
+          const dupTab = createTab(tab.url, true);
+          insertTabAfter(dupTab.id, tabId);
+        } else if (action === "close-others") {
+          const others = tabs.filter((t) => t.id !== tabId).map((t) => t.id);
+          others.forEach((id) => closeTab(id));
+        } else if (action === "close-right") {
+          const targetIdx = tabs.findIndex((t) => t.id === tabId);
+          if (targetIdx !== -1) {
+            const rightTabs = tabs.slice(targetIdx + 1).map((t) => t.id);
+            rightTabs.forEach((id) => closeTab(id));
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[alma] onTabAction failed:", err);
+    }
+  });
+}
+
+if (almaAPI?.onAddressAction) {
+  almaAPI.onAddressAction((action: string, payload?: any) => {
+    if (action === "paste-and-go" && typeof payload === "string") {
+      addressInput.value = payload;
+      navigateTo(resolveURL(payload));
+    }
+  });
+}
+
+window.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === "t" || e.key === "T")) {
+    e.preventDefault();
+    reopenClosedTab();
+  }
+});
 
 // ---- Home page search ----
 const homeSearch = document.getElementById("home-search") as HTMLInputElement | null;
