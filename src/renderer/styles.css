@@ -436,6 +436,11 @@ img {
   opacity: 0.5;
 }
 
+.tab.drag-over {
+  border-color: var(--tint, var(--accent));
+  box-shadow: inset 2px 0 0 var(--tint, var(--accent));
+}
+
 /* ---- Split view ---- */
 .split-divider {
   position: absolute;

@@ -546,24 +546,84 @@ function createTab(initialUrl: string = HOME_URL, makeActive: boolean = true): T
   tabs.push(tab);
   attachWebviewEvents(tab);
 
-  // drag and drop (in-window reorder only)
+  // drag and drop: reorder within window + tear-off + drop into other window
   element.addEventListener("dragstart", (e) => {
-    e.dataTransfer?.setData("text/plain", String(id));
+    draggedTabId = id;
+    dragHandled = false;
+    droppedInTabBar = false;
+    const tab = tabs.find((t) => t.id === id);
+    const payload = {
+      tabId: id,
+      url: tab?.url ?? HOME_URL,
+      title: tab?.title ?? "New Tab",
+      sourceWindowId: currentWindowId,
+    };
+    currentDragPayload = payload;
+    // Use JSON so other windows can read it via onDragStart broadcast
+    e.dataTransfer?.setData("text/plain", JSON.stringify(payload));
     element.classList.add("dragging");
+    almaAPI?.notifyDragStart(payload);
   });
-  element.addEventListener("dragend", () => {
+
+  element.addEventListener("dragend", async () => {
     element.classList.remove("dragging");
+    if (!draggedTabId || draggedTabId !== id) return;
+    const tab = tabs.find((t) => t.id === id);
+    const payload = {
+      tabId: id,
+      url: tab?.url ?? HOME_URL,
+      title: tab?.title ?? "New Tab",
+      sourceWindowId: currentWindowId,
+    };
+    // Ask main process: did cursor land on another window's tab bar, or outside?
+    try {
+      const result = await almaAPI?.finalizeDrag(payload);
+      // "move"    → main already called __almaReceiveTab on target + remove-tab on us
+      // "tearoff" → main opened a new window + remove-tab on us
+      // undefined → dropped back in same window (reorder already handled by drop event)
+      if (!result || result.action === "tearoff" || result.action === "move") {
+        // main handles tab removal via onRemoveTab; nothing more needed here
+      }
+    } catch {
+      // ignore
+    }
+    almaAPI?.notifyDragEnd();
+    draggedTabId = null;
+    currentDragPayload = null;
   });
+
   element.addEventListener("dragover", (e) => {
     e.preventDefault();
+    // Show insertion indicator while hovering
+    element.classList.add("drag-over");
   });
+
+  element.addEventListener("dragleave", () => {
+    element.classList.remove("drag-over");
+  });
+
   element.addEventListener("drop", (e) => {
+    element.classList.remove("drag-over");
     e.preventDefault();
     e.stopPropagation();
-    const fromId = Number(e.dataTransfer?.getData("text/plain"));
-    if (!fromId || fromId === id) return;
-    reorderTabs(fromId, id);
-    persistTabs();
+    if (dropInProgress) return;
+    dropInProgress = true;
+    setTimeout(() => { dropInProgress = false; }, 50);
+    droppedInTabBar = true;
+    // Try currentDragPayload first (same process), then parse dataTransfer
+    let payload: any = currentDragPayload;
+    if (!payload) {
+      try { payload = JSON.parse(e.dataTransfer?.getData("text/plain") || ""); } catch { return; }
+    }
+    if (!payload?.tabId) return;
+    const fromId = payload.tabId as number;
+    if (fromId === id) return;
+    // Same-window reorder
+    if (payload.sourceWindowId === currentWindowId) {
+      reorderTabs(fromId, id);
+      persistTabs();
+    }
+    // Cross-window drop is handled by finalizeDrag in main process
   });
 
   element.addEventListener("click", () => {
@@ -1151,7 +1211,7 @@ if (tabsContainer) {
     e.preventDefault();
     if (dropInProgress) return;
     dropInProgress = true;
-    setTimeout(() => { dropInProgress = false; }, 0);
+    setTimeout(() => { dropInProgress = false; }, 50);
     dragHandled = true;
     droppedInTabBar = true;
     let payload: any = currentDragPayload;
