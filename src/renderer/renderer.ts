@@ -519,7 +519,8 @@ function receiveTabFromWindow(payload: any, insertBeforeTabId?: number) {
   const fromWindowId = payload?.sourceWindowId as number | null;
   const fromTabId = payload?.tabId as number | undefined;
 
-  const newTab = createTab(HOME_URL, false);
+  // Pass the real URL directly — createTab navigates via dom-ready, so this is correct
+  const newTab = createTab(url, false);
   newTab.title = title;
   updateTabUI(newTab);
 
@@ -535,9 +536,6 @@ function receiveTabFromWindow(payload: any, insertBeforeTabId?: number) {
   }
 
   switchTab(newTab.id);
-  if (!isHomeUrl(url) && !isHistoryUrl(url) && !isFavoritesUrl(url)) {
-    navigateTab(newTab, url);
-  }
   persistTabs();
 
   // Remove the tab from the source window
