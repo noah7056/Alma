@@ -324,7 +324,6 @@ body {
   cursor: pointer;
   background: transparent;
   border: 1px solid transparent;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
   text-decoration: none;
   color: var(--text);
   outline: none;
@@ -334,7 +333,6 @@ body {
 .shortcut-item:hover {
   background: color-mix(in srgb, var(--tint) 8%, var(--surface-hover));
   border-color: color-mix(in srgb, var(--tint) 20%, var(--border));
-  transform: translateY(-2px);
 }
 
 .shortcut-icon-wrapper {
@@ -351,7 +349,6 @@ body {
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   flex-shrink: 0;
-  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 
 .shortcut-item:hover .shortcut-icon-wrapper {
@@ -410,7 +407,6 @@ body {
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.1s ease;
   z-index: 10;
   padding: 0;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
@@ -426,11 +422,6 @@ body {
   background: #ff3b30;
   border-color: #ff3b30;
   color: #ffffff;
-  transform: scale(1.12);
-}
-
-.shortcut-delete:active {
-  transform: scale(0.95);
 }
 
 /* + Add Shortcut placeholder */
@@ -443,6 +434,9 @@ body {
 .shortcut-add .shortcut-icon-wrapper {
   background: var(--surface);
   border: 1.5px dashed var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .shortcut-add:hover .shortcut-icon-wrapper {
@@ -451,18 +445,16 @@ body {
   background: color-mix(in srgb, var(--tint) 18%, var(--surface));
 }
 
-.shortcut-add-plus {
-  font-size: 24px;
-  line-height: 1;
-  color: var(--text-secondary);
-  font-weight: 300;
-  transition: color 0.15s ease, transform 0.15s ease;
+.shortcut-add-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
   pointer-events: none;
+  margin: auto;
 }
 
-.shortcut-add:hover .shortcut-add-plus {
-  color: var(--text);
-  transform: scale(1.2);
+[data-theme="dark"] .shortcut-add-icon {
+  filter: brightness(0) invert(1);
 }
 
 /* Modal Popup */
@@ -476,12 +468,6 @@ body {
   align-items: center;
   justify-content: center;
   z-index: 100;
-  animation: modalFadeIn 0.15s ease;
-}
-
-@keyframes modalFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
 }
 
 .modal-card {
@@ -495,13 +481,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  animation: modalSlideUp 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   box-sizing: border-box;
-}
-
-@keyframes modalSlideUp {
-  from { transform: translateY(12px) scale(0.97); opacity: 0; }
-  to { transform: translateY(0) scale(1); opacity: 1; }
 }
 
 [data-theme="dark"] .modal-card {
@@ -553,7 +533,6 @@ body {
   font-size: 14px;
   outline: none;
   box-sizing: border-box;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .modal-input:focus {
@@ -576,7 +555,6 @@ body {
   font-weight: 500;
   cursor: pointer;
   border: 1px solid var(--border);
-  transition: background 0.12s ease, border-color 0.12s ease, transform 0.1s ease;
 }
 
 .modal-btn.secondary {
@@ -596,7 +574,172 @@ body {
 
 .modal-btn.primary:hover {
   opacity: 0.9;
-  transform: translateY(-1px);
+}
+
+/* ---- Favorites Folders & Items ---- */
+.fav-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.fav-new-folder-btn {
+  width: 100%;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.fav-new-folder-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+}
+
+.fav-folder-form {
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--tint) 8%, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.fav-folder-section {
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.fav-folder-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  background: color-mix(in srgb, var(--tint) 8%, var(--surface));
+  border-bottom: 1px solid transparent;
+}
+
+.fav-folder-section.open .fav-folder-header {
+  border-bottom-color: var(--border);
+}
+
+.fav-folder-header:hover {
+  background: color-mix(in srgb, var(--tint) 14%, var(--surface));
+}
+
+.fav-folder-toggle {
+  font-size: 10px;
+  color: var(--text-secondary);
+  width: 12px;
+  display: inline-block;
+  text-align: center;
+}
+
+.fav-folder-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fav-folder-count {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.fav-folder-delete {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.fav-folder-delete:hover {
+  color: #ff3b30;
+}
+
+.fav-folder-items {
+  padding: 2px 8px;
+}
+
+.fav-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.fav-item-row:last-child {
+  border-bottom: none;
+}
+
+.fav-item-link {
+  color: #007aff;
+  text-decoration: none;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.fav-item-link:hover {
+  text-decoration: underline;
+}
+
+.fav-move-select {
+  height: 24px;
+  padding: 0 4px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-secondary);
+  cursor: pointer;
+  outline: none;
+  max-width: 90px;
+}
+
+.fav-move-select:focus {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.fav-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin: 12px 0 6px;
 }
 
 

@@ -900,10 +900,39 @@ function normalizeUrl(u: string): string {
   }
 }
 
-function getFavorites(): { url: string; title: string; time: number }[] {
+interface FavoriteItem {
+  url: string;
+  title: string;
+  time: number;
+  folderId?: string;
+}
+
+interface FavoriteFolder {
+  id: string;
+  name: string;
+}
+
+const openFolderIds: Set<string> = new Set();
+let foldersInitialized = false;
+
+function ensureFolderState() {
+  if (!foldersInitialized) {
+    getFavoriteFolders().forEach(f => openFolderIds.add(f.id));
+    foldersInitialized = true;
+  }
+}
+
+function getFavoriteFolders(): FavoriteFolder[] {
+  try { return JSON.parse(localStorage.getItem("alma:favorite_folders") || "[]"); } catch { return []; }
+}
+function setFavoriteFolders(folders: FavoriteFolder[]) {
+  try { localStorage.setItem("alma:favorite_folders", JSON.stringify(folders)); } catch { /* ignore */ }
+}
+
+function getFavorites(): FavoriteItem[] {
   try { return JSON.parse(localStorage.getItem("alma:favorites") || "[]"); } catch { return []; }
 }
-function setFavorites(list: { url: string; title: string; time: number }[]) {
+function setFavorites(list: FavoriteItem[]) {
   try { localStorage.setItem("alma:favorites", JSON.stringify(list)); } catch { /* ignore */ }
 }
 function isFavoriteUrlSaved(url: string): boolean {
@@ -911,12 +940,12 @@ function isFavoriteUrlSaved(url: string): boolean {
   if (!norm) return false;
   return getFavorites().some((f) => normalizeUrl(f.url) === norm);
 }
-function addFavorite(url: string, title: string) {
+function addFavorite(url: string, title: string, folderId?: string) {
   if (!url || isHomeUrl(url) || isHistoryUrl(url) || isFavoritesUrl(url)) return;
   const norm = normalizeUrl(url);
   const favs = getFavorites();
   if (favs.some((f) => normalizeUrl(f.url) === norm)) return;
-  favs.unshift({ url, title: title || friendlyTabTitle(url), time: Date.now() });
+  favs.unshift({ url, title: title || friendlyTabTitle(url), time: Date.now(), folderId });
   setFavorites(favs);
 }
 function removeFavorite(url: string) {
@@ -929,34 +958,204 @@ function toggleFavorite(url: string, title: string) {
   else addFavorite(url, title);
   renderFavorites();
 }
-function renderFavorites() {
+
+function deleteFavoriteFolder(folderId: string) {
+  const folders = getFavoriteFolders().filter(f => f.id !== folderId);
+  setFavoriteFolders(folders);
+  openFolderIds.delete(folderId);
+
+  // Unfile items from this folder (don't delete their links)
   const favs = getFavorites();
+  favs.forEach(f => {
+    if (f.folderId === folderId) {
+      delete f.folderId;
+    }
+  });
+  setFavorites(favs);
+  renderFavorites();
+}
+
+function renderFavoriteRow(item: FavoriteItem, folders: FavoriteFolder[]): string {
+  const folderOptions = [
+    `<option value="none" ${!item.folderId ? "selected" : ""}>Unfiled</option>`,
+    ...folders.map(f => `<option value="${f.id}" ${item.folderId === f.id ? "selected" : ""}>📁 ${f.name}</option>`)
+  ].join("");
+
+  return `
+    <div class="fav-item-row" data-url="${encodeURIComponent(item.url)}">
+      <a href="${item.url}" data-url="${item.url}" class="fav-item-link" title="${item.title}">${item.title}</a>
+      ${folders.length > 0 ? `<select class="fav-move-select" data-url="${encodeURIComponent(item.url)}" title="Move to folder">${folderOptions}</select>` : ""}
+      <button data-remove="${encodeURIComponent(item.url)}" class="settings-btn" style="width:auto;padding:2px 8px;font-size:12px;">Remove</button>
+    </div>
+  `;
+}
+
+function renderFavorites() {
+  ensureFolderState();
+  const favs = getFavorites();
+  const folders = getFavoriteFolders();
+
   const render = (containerId: string) => {
     const container = document.getElementById(containerId);
     if (!container) return;
-    if (favs.length === 0) {
-      container.innerHTML = `<div style="padding:12px 0;color:var(--text-secondary);">Nothing yet</div>`;
+
+    if (favs.length === 0 && folders.length === 0) {
+      container.innerHTML = `<div style="padding:16px 0;text-align:center;color:var(--text-secondary);font-size:13px;">Nothing yet</div>`;
       return;
     }
-    container.innerHTML = favs.map((e) => `<div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px;"><a href="${e.url}" data-url="${e.url}" style="color:#007aff;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.title}</a><button data-remove="${e.url}" class="settings-btn" style="width:auto;padding:2px 8px;">Remove</button></div>`).join("");
-    container.querySelectorAll("a").forEach((a) => {
-      a.addEventListener("click", (ev) => {
+
+    let html = "";
+
+    // 1. Folders
+    folders.forEach(folder => {
+      const folderFavs = favs.filter(f => f.folderId === folder.id);
+      const isOpen = openFolderIds.has(folder.id);
+
+      html += `
+        <div class="fav-folder-section ${isOpen ? "open" : ""}" data-folder-id="${folder.id}">
+          <div class="fav-folder-header" data-toggle-folder="${folder.id}">
+            <span class="fav-folder-toggle">${isOpen ? "▼" : "▶"}</span>
+            <span class="fav-folder-title">📁 ${folder.name}</span>
+            <span class="fav-folder-count">(${folderFavs.length})</span>
+            <button class="fav-folder-delete" data-delete-folder="${folder.id}" title="Delete folder" aria-label="Delete folder">✕</button>
+          </div>
+          ${isOpen ? `
+            <div class="fav-folder-items">
+              ${folderFavs.length === 0
+                ? `<div style="padding:8px 4px;color:var(--text-secondary);font-size:12px;font-style:italic;">Empty folder</div>`
+                : folderFavs.map(f => renderFavoriteRow(f, folders)).join("")}
+            </div>
+          ` : ""}
+        </div>
+      `;
+    });
+
+    // 2. Unfiled items
+    const unfiledFavs = favs.filter(f => !f.folderId || !folders.some(fd => fd.id === f.folderId));
+    if (unfiledFavs.length > 0) {
+      if (folders.length > 0) {
+        html += `<div class="fav-section-label">Unfiled Favorites (${unfiledFavs.length})</div>`;
+      }
+      html += `<div class="fav-unfiled-items">${unfiledFavs.map(f => renderFavoriteRow(f, folders)).join("")}</div>`;
+    }
+
+    container.innerHTML = html;
+
+    // Attach listeners
+    container.querySelectorAll<HTMLAnchorElement>("a.fav-item-link").forEach(a => {
+      a.addEventListener("click", ev => {
         ev.preventDefault();
         const url = (ev.currentTarget as HTMLElement).getAttribute("data-url");
         if (url) navigateTo(url);
       });
     });
-    container.querySelectorAll("button[data-remove]").forEach((b) => {
-      b.addEventListener("click", (ev) => {
+
+    container.querySelectorAll<HTMLButtonElement>("button[data-remove]").forEach(b => {
+      b.addEventListener("click", ev => {
         ev.preventDefault();
-        const url = (ev.currentTarget as HTMLElement).getAttribute("data-remove");
-        if (url) { removeFavorite(url); renderFavorites(); updateFavoriteButtons(); }
+        const encodedUrl = (ev.currentTarget as HTMLElement).getAttribute("data-remove");
+        if (encodedUrl) {
+          const url = decodeURIComponent(encodedUrl);
+          removeFavorite(url);
+          renderFavorites();
+          updateFavoriteButtons();
+        }
+      });
+    });
+
+    container.querySelectorAll<HTMLSelectElement>("select.fav-move-select").forEach(sel => {
+      sel.addEventListener("change", ev => {
+        const select = ev.currentTarget as HTMLSelectElement;
+        const encodedUrl = select.getAttribute("data-url");
+        if (!encodedUrl) return;
+        const url = decodeURIComponent(encodedUrl);
+        const folderId = select.value === "none" ? undefined : select.value;
+        const currentFavs = getFavorites();
+        const targetFav = currentFavs.find(f => normalizeUrl(f.url) === normalizeUrl(url));
+        if (targetFav) {
+          targetFav.folderId = folderId;
+          setFavorites(currentFavs);
+          renderFavorites();
+        }
+      });
+    });
+
+    container.querySelectorAll<HTMLElement>("[data-toggle-folder]").forEach(header => {
+      header.addEventListener("click", ev => {
+        const target = ev.target as HTMLElement;
+        if (target.closest("[data-delete-folder]")) return;
+        const folderId = header.getAttribute("data-toggle-folder");
+        if (!folderId) return;
+        if (openFolderIds.has(folderId)) {
+          openFolderIds.delete(folderId);
+        } else {
+          openFolderIds.add(folderId);
+        }
+        renderFavorites();
+      });
+    });
+
+    container.querySelectorAll<HTMLButtonElement>("[data-delete-folder]").forEach(btn => {
+      btn.addEventListener("click", ev => {
+        ev.stopPropagation();
+        const folderId = btn.getAttribute("data-delete-folder");
+        if (!folderId) return;
+        deleteFavoriteFolder(folderId);
       });
     });
   };
+
   render("favorites-list");
   render("favorites-list-page");
 }
+
+function setupFolderForm(btnId: string, formId: string, inputId: string, cancelId: string, saveId: string) {
+  const btn = document.getElementById(btnId);
+  const form = document.getElementById(formId);
+  const input = document.getElementById(inputId) as HTMLInputElement | null;
+  const cancelBtn = document.getElementById(cancelId);
+  const saveBtn = document.getElementById(saveId);
+
+  if (btn && form) {
+    btn.addEventListener("click", () => {
+      const isVisible = form.style.display !== "none";
+      form.style.display = isVisible ? "none" : "flex";
+      if (!isVisible && input) {
+        input.value = "";
+        input.focus();
+      }
+    });
+  }
+
+  const doSave = () => {
+    const name = input?.value.trim();
+    if (!name) return;
+    const folders = getFavoriteFolders();
+    const newId = "f_" + Date.now();
+    folders.push({ id: newId, name });
+    setFavoriteFolders(folders);
+    openFolderIds.add(newId);
+    if (input) input.value = "";
+    if (form) form.style.display = "none";
+    renderFavorites();
+  };
+
+  if (saveBtn) saveBtn.addEventListener("click", doSave);
+  if (cancelBtn && form) cancelBtn.addEventListener("click", () => { form.style.display = "none"; });
+  if (input) {
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        doSave();
+      } else if (e.key === "Escape" && form) {
+        form.style.display = "none";
+      }
+    });
+  }
+}
+
+setupFolderForm("new-folder-btn", "new-folder-form", "new-folder-name", "cancel-folder-btn", "save-folder-btn");
+setupFolderForm("new-folder-btn-page", "new-folder-form-page", "new-folder-name-page", "cancel-folder-btn-page", "save-folder-btn-page");
 
 function updateFavoriteButtons() {
   const setBtn = (btn: HTMLButtonElement | null, url: string | null) => {
@@ -1517,10 +1716,11 @@ function renderShortcuts(): void {
       const iconWrapper = document.createElement("div");
       iconWrapper.className = "shortcut-icon-wrapper";
 
-      const plus = document.createElement("span");
-      plus.className = "shortcut-add-plus";
-      plus.textContent = "+";
-      iconWrapper.appendChild(plus);
+      const icon = document.createElement("img");
+      icon.className = "shortcut-add-icon";
+      icon.src = "assets/icons/new-window.svg";
+      icon.alt = "+";
+      iconWrapper.appendChild(icon);
       addBtn.appendChild(iconWrapper);
 
       const nameSpan = document.createElement("span");

@@ -70,6 +70,16 @@
       <div class="history-panel">
         <div class="history-header">
           <div class="alma-subtitle">Favorites</div>
+          <div style="display:flex;justify-content:center;margin-top:10px;">
+            <button id="new-folder-btn-page" class="fav-new-folder-btn" style="max-width:200px;">+ New folder</button>
+          </div>
+          <div id="new-folder-form-page" class="fav-folder-form" style="display:none;max-width:280px;margin:10px auto;">
+            <input type="text" id="new-folder-name-page" class="modal-input" placeholder="Folder name" style="height:32px;font-size:13px;" />
+            <div style="display:flex;gap:6px;justify-content:flex-end;">
+              <button id="cancel-folder-btn-page" class="modal-btn secondary" style="height:28px;padding:0 10px;font-size:12px;">Cancel</button>
+              <button id="save-folder-btn-page" class="modal-btn primary" style="height:28px;padding:0 12px;font-size:12px;">Create</button>
+            </div>
+          </div>
         </div>
         <div id="favorites-list-page" class="history-list"></div>
         <div class="history-footer">
@@ -125,6 +135,16 @@
     <div class="themes-header">
       <span class="themes-title">Favorites</span>
       <button id="close-favorites" class="themes-close" aria-label="Close">&#10005;</button>
+    </div>
+    <div class="fav-toolbar">
+      <button id="new-folder-btn" class="fav-new-folder-btn">+ New folder</button>
+    </div>
+    <div id="new-folder-form" class="fav-folder-form" style="display:none;">
+      <input type="text" id="new-folder-name" class="modal-input" placeholder="Folder name" style="height:32px;font-size:13px;" />
+      <div style="display:flex;gap:6px;justify-content:flex-end;">
+        <button id="cancel-folder-btn" class="modal-btn secondary" style="height:28px;padding:0 10px;font-size:12px;">Cancel</button>
+        <button id="save-folder-btn" class="modal-btn primary" style="height:28px;padding:0 12px;font-size:12px;">Create</button>
+      </div>
     </div>
     <div id="favorites-list" class="history-list"></div>
     <div style="margin-top:12px;text-align:center;">
