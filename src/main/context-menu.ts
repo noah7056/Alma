@@ -29,7 +29,7 @@ function getHostWindow(contents: WebContents): BrowserWindow | null {
 }
 
 export function registerContextMenuHandlers(
-  createWindowFn: (tabId?: number, initialURL?: string) => BrowserWindow
+  createWindowFn: (tabId?: number, initialURL?: string, isNewWindow?: boolean) => BrowserWindow
 ) {
   // 1. Handle Webview and Window context menus via app web-contents-created
   app.on("web-contents-created", (_event, contents) => {
@@ -42,7 +42,7 @@ export function registerContextMenuHandlers(
         if (win && !win.isDestroyed()) {
           win.webContents.send("browser:new-tab", { url, makeActive: true });
         } else {
-          createWindowFn(undefined, url);
+          createWindowFn(undefined, url, true);
         }
         return { action: "deny" };
       });
@@ -93,7 +93,7 @@ export function registerContextMenuHandlers(
           {
             label: "Open Link in New Window",
             click: () => {
-              createWindowFn(undefined, params.linkURL);
+              createWindowFn(undefined, params.linkURL, true);
             },
           },
           { type: "separator" },

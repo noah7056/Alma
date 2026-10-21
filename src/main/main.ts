@@ -13,7 +13,7 @@ let nextTabId = 1;
 
 const HOME_URL = url.pathToFileURL(path.join(__dirname, "../renderer/home.html")).href;
 
-function createWindow(tabId?: number, initialURL?: string): BrowserWindow {
+function createWindow(tabId?: number, initialURL?: string, isNewWindow?: boolean): BrowserWindow {
   const id = tabId ?? nextTabId++;
   const indexPath = path.join(__dirname, "../renderer/index.html");
   const win = new BrowserWindow({
@@ -34,14 +34,16 @@ function createWindow(tabId?: number, initialURL?: string): BrowserWindow {
     },
   });
 
-  win.loadFile(indexPath);
-
-  if (initialURL) {
-    win.webContents.once("did-finish-load", () => {
-      if (initialURL !== HOME_URL) {
+  if (isNewWindow) {
+    // newWindow=1 tells the renderer to skip session restore and show a fresh home tab
+    win.loadFile(indexPath, { query: { newWindow: "1" } });
+  } else {
+    win.loadFile(indexPath);
+    if (initialURL && initialURL !== HOME_URL) {
+      win.webContents.once("did-finish-load", () => {
         win.webContents.send("browser:navigate-to", initialURL);
-      }
-    });
+      });
+    }
   }
 
   const handleClosed = () => {
@@ -65,7 +67,7 @@ function createWindow(tabId?: number, initialURL?: string): BrowserWindow {
 }
 
 ipcMain.handle("browser:new-window", (_, url?: string) => {
-  const win = createWindow(undefined, url);
+  const win = createWindow(undefined, url || HOME_URL, true);
   return { id: win.webContents.id };
 });
 
@@ -280,7 +282,7 @@ ipcMain.handle("browser:finalize-drag", async (event, payload: any) => {
   }
 
   // tear off: new window
-  const win = createWindow(undefined, payload?.url);
+  const win = createWindow(undefined, payload?.url || HOME_URL, true);
   if (sourceWindow && !sourceWindow.isDestroyed()) {
     sourceWindow.webContents.send("browser:remove-tab", payload?.tabId);
   }
@@ -308,7 +310,7 @@ ipcMain.on("context-menu:show-address-bar", (event, options) => {
 registerContextMenuHandlers(createWindow);
 
 app.whenReady().then(() => {
-  createWindow(undefined, HOME_URL);
+  createWindow();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

@@ -174,6 +174,8 @@ let nextTabId = 1;
 let webview: any = null;
 let splitMode = false;
 let splitRatio = 0.5;
+let draggingDivider = false;
+let dragOverlayEl: HTMLElement | null = null;
 let leftTabId: number | null = null;
 let rightTabId: number | null = null;
 let focusedPane: "left" | "right" = "left";
@@ -188,7 +190,10 @@ let dropInProgress = false;
 let droppedInTabBar = false;
 
 function isHomeUrl(url: string): boolean {
-  return url === HOME_URL || url === "about:blank" || /^https?:\/\/home\.html$/i.test(url);
+  return url === HOME_URL
+    || url === "about:blank"
+    || /^https?:\/\/home\.html$/i.test(url)
+    || /[/\\]home\.html$/i.test(url);   // catches file:// paths to home.html
 }
 
 function isHistoryUrl(url: string): boolean {
@@ -232,6 +237,10 @@ function setNavState(back: boolean, forward: boolean) {
 }
 
 function syncNavState() {
+  if (splitMode) {
+    if (leftToolbar && (leftToolbar as any)._sync) (leftToolbar as any)._sync();
+    if (rightToolbar && (rightToolbar as any)._sync) (rightToolbar as any)._sync();
+  }
   const wv = getActiveWebview();
   try {
     setNavState(
@@ -247,7 +256,8 @@ function updateTabUI(tab: Tab) {
   if (!tab.element) return;
   const titleEl = tab.element.querySelector(".tab-title") as HTMLElement | null;
   if (titleEl) titleEl.textContent = tab.title || tab.url || "New Tab";
-  tab.element.classList.toggle("active", tab.id === activeTabId);
+  const isActive = splitMode ? (tab.id === leftTabId || tab.id === rightTabId) : (tab.id === activeTabId);
+  tab.element.classList.toggle("active", isActive);
   if (tab.id === activeTabId) updateFavoriteButtons();
 }
 
@@ -265,27 +275,29 @@ function attachWebviewEvents(tab: Tab) {
       persistTabs();
     }
     tab.initialAboutBlankPending = false;
-    if (tab.id === activeTabId) {
-      if (isHomeUrl(tab.url)) {
-        if (homeView) homeView.style.display = "flex";
-        if (historyView) historyView.style.display = "none";
-        if (favoritesView) favoritesView.style.display = "none";
-      } else if (isHistoryUrl(tab.url)) {
-        if (homeView) homeView.style.display = "none";
-        if (historyView) historyView.style.display = "flex";
-        if (favoritesView) favoritesView.style.display = "none";
-        renderHistory();
-      } else if (isFavoritesUrl(tab.url)) {
-        if (homeView) homeView.style.display = "none";
-        if (historyView) historyView.style.display = "none";
-        if (favoritesView) favoritesView.style.display = "flex";
-        renderFavorites();
-      } else {
-        if (homeView) homeView.style.display = "none";
-        if (historyView) historyView.style.display = "none";
-        if (favoritesView) favoritesView.style.display = "none";
+    if (tab.id === activeTabId || (splitMode && (tab.id === leftTabId || tab.id === rightTabId))) {
+      if (!splitMode) {
+        if (isHomeUrl(tab.url)) {
+          if (homeView) homeView.style.display = "flex";
+          if (historyView) historyView.style.display = "none";
+          if (favoritesView) favoritesView.style.display = "none";
+        } else if (isHistoryUrl(tab.url)) {
+          if (homeView) homeView.style.display = "none";
+          if (historyView) historyView.style.display = "flex";
+          if (favoritesView) favoritesView.style.display = "none";
+          renderHistory();
+        } else if (isFavoritesUrl(tab.url)) {
+          if (homeView) homeView.style.display = "none";
+          if (historyView) historyView.style.display = "none";
+          if (favoritesView) favoritesView.style.display = "flex";
+          renderFavorites();
+        } else {
+          if (homeView) homeView.style.display = "none";
+          if (historyView) historyView.style.display = "none";
+          if (favoritesView) favoritesView.style.display = "none";
+        }
+        addressInput.value = tab.url;
       }
-      addressInput.value = tab.url;
       syncNavState();
       if (splitMode) applyLayout();
     }
@@ -298,34 +310,36 @@ function attachWebviewEvents(tab: Tab) {
       tab.title = friendlyTabTitle(tab.url);
     }
     tab.initialAboutBlankPending = false;
-    if (tab.id === activeTabId) {
-      if (isHomeUrl(tab.url)) {
-        if (homeView) homeView.style.display = "flex";
-        if (historyView) historyView.style.display = "none";
-        if (favoritesView) favoritesView.style.display = "none";
-      } else if (isHistoryUrl(tab.url)) {
-        if (homeView) homeView.style.display = "none";
-        if (historyView) historyView.style.display = "flex";
-        if (favoritesView) favoritesView.style.display = "none";
-        renderHistory();
-      } else if (isFavoritesUrl(tab.url)) {
-        if (homeView) homeView.style.display = "none";
-        if (historyView) historyView.style.display = "none";
-        if (favoritesView) favoritesView.style.display = "flex";
-        renderFavorites();
-      } else {
-        if (homeView) homeView.style.display = "none";
-        if (historyView) historyView.style.display = "none";
-        if (favoritesView) favoritesView.style.display = "none";
+    if (tab.id === activeTabId || (splitMode && (tab.id === leftTabId || tab.id === rightTabId))) {
+      if (!splitMode) {
+        if (isHomeUrl(tab.url)) {
+          if (homeView) homeView.style.display = "flex";
+          if (historyView) historyView.style.display = "none";
+          if (favoritesView) favoritesView.style.display = "none";
+        } else if (isHistoryUrl(tab.url)) {
+          if (homeView) homeView.style.display = "none";
+          if (historyView) historyView.style.display = "flex";
+          if (favoritesView) favoritesView.style.display = "none";
+          renderHistory();
+        } else if (isFavoritesUrl(tab.url)) {
+          if (homeView) homeView.style.display = "none";
+          if (historyView) historyView.style.display = "none";
+          if (favoritesView) favoritesView.style.display = "flex";
+          renderFavorites();
+        } else {
+          if (homeView) homeView.style.display = "none";
+          if (historyView) historyView.style.display = "none";
+          if (favoritesView) favoritesView.style.display = "none";
+        }
+        addressInput.value = tab.url;
       }
-      addressInput.value = tab.url;
       syncNavState();
       if (splitMode) applyLayout();
     }
     updateTabUI(tab);
   });
   wv.addEventListener("did-finish-load", () => {
-    if (tab.id === activeTabId) {
+    if (tab.id === activeTabId || (splitMode && (tab.id === leftTabId || tab.id === rightTabId))) {
       syncNavState();
     }
     tab.title = friendlyTabTitle(tab.url);
@@ -401,7 +415,15 @@ function createTab(initialUrl: string = HOME_URL, makeActive: boolean = true): T
 
   element.addEventListener("click", () => {
     if (splitMode) {
-      // Do not affect split panes when interacting with the tab strip.
+      if (focusedPane === "left") {
+        leftTabId = id;
+      } else {
+        rightTabId = id;
+      }
+      activeTabId = id;
+      tabs.forEach((t) => updateTabUI(t));
+      applyLayout();
+      syncNavState();
       return;
     }
     switchTab(id);
@@ -600,6 +622,20 @@ function renderHistory() {
   });
 }
 
+function normalizeUrl(u: string): string {
+  if (!u) return "";
+  try {
+    const parsed = new URL(u);
+    let pathname = parsed.pathname;
+    if (pathname.length > 1 && pathname.endsWith("/")) {
+      pathname = pathname.slice(0, -1);
+    }
+    return `${parsed.protocol}//${parsed.host}${pathname}${parsed.search}`;
+  } catch {
+    return u.trim().replace(/\/+$/, "");
+  }
+}
+
 function getFavorites(): { url: string; title: string; time: number }[] {
   try { return JSON.parse(localStorage.getItem("alma:favorites") || "[]"); } catch { return []; }
 }
@@ -607,17 +643,21 @@ function setFavorites(list: { url: string; title: string; time: number }[]) {
   try { localStorage.setItem("alma:favorites", JSON.stringify(list)); } catch { /* ignore */ }
 }
 function isFavoriteUrlSaved(url: string): boolean {
-  return getFavorites().some((f) => f.url === url);
+  const norm = normalizeUrl(url);
+  if (!norm) return false;
+  return getFavorites().some((f) => normalizeUrl(f.url) === norm);
 }
 function addFavorite(url: string, title: string) {
   if (!url || isHomeUrl(url) || isHistoryUrl(url) || isFavoritesUrl(url)) return;
+  const norm = normalizeUrl(url);
   const favs = getFavorites();
-  if (favs.some((f) => f.url === url)) return;
+  if (favs.some((f) => normalizeUrl(f.url) === norm)) return;
   favs.unshift({ url, title: title || friendlyTabTitle(url), time: Date.now() });
   setFavorites(favs);
 }
 function removeFavorite(url: string) {
-  const favs = getFavorites().filter((f) => f.url !== url);
+  const norm = normalizeUrl(url);
+  const favs = getFavorites().filter((f) => normalizeUrl(f.url) !== norm);
   setFavorites(favs);
 }
 function toggleFavorite(url: string, title: string) {
@@ -663,14 +703,18 @@ function updateFavoriteButtons() {
     const filled = btn.querySelector(".favorite-star-filled") as HTMLImageElement | null;
     if (outline) outline.style.display = fav ? "none" : "";
     if (filled) filled.style.display = fav ? "" : "none";
+    const singleImg = btn.querySelector("img:not(.favorite-star-outline):not(.favorite-star-filled)") as HTMLImageElement | null;
+    if (singleImg) {
+      singleImg.src = fav ? "assets/icons/favorited.svg" : "assets/icons/favorite.svg";
+    }
   };
   // main toolbar
   const mainBtn = document.getElementById("favorite") as HTMLButtonElement | null;
-  setBtn(mainBtn, getActiveTab() ? getActiveTab()!.url : null);
+  const activeTab = getActiveTab();
+  setBtn(mainBtn, activeTab ? activeTab.url : null);
   // pane toolbars
   document.querySelectorAll(".pane-toolbar").forEach((bar) => {
     const btn = bar.querySelector(".favorite-btn") as HTMLButtonElement | null;
-    // find corresponding tab via toolbar? Use data attribute if set; fallback by reading input? We'll set data-side
     const side = (bar as HTMLElement).dataset.side;
     const tabId = side === "left" ? leftTabId : side === "right" ? rightTabId : null;
     const tab = tabId ? tabs.find((t) => t.id === tabId) : null;
@@ -1058,6 +1102,15 @@ if (almaAPI?.onTabAction) {
 if (almaAPI?.onAddressAction) {
   almaAPI.onAddressAction((action: string, payload?: any) => {
     if (action === "paste-and-go" && typeof payload === "string") {
+      if (splitMode) {
+        const paneTab = tabs.find((t) => t.id === (focusedPane === "left" ? leftTabId : rightTabId));
+        if (paneTab) {
+          navigateTab(paneTab, resolveURL(payload));
+          if (leftToolbar && (leftToolbar as any)._sync) (leftToolbar as any)._sync();
+          if (rightToolbar && (rightToolbar as any)._sync) (rightToolbar as any)._sync();
+          return;
+        }
+      }
       addressInput.value = payload;
       navigateTo(resolveURL(payload));
     }
@@ -1108,6 +1161,28 @@ if (almaAPI?.onRemoveTab) {
   });
 }
 
+let homeViewRight: HTMLElement | null = null;
+function getHomeViewRight(): HTMLElement {
+  if (!homeViewRight && homeView) {
+    homeViewRight = homeView.cloneNode(true) as HTMLElement;
+    homeViewRight.id = "home-view-right";
+    const input = homeViewRight.querySelector("input");
+    const btn = homeViewRight.querySelector("button");
+    const doGo = () => {
+      const val = input?.value.trim();
+      if (!val) return;
+      const rightTab = tabs.find((t) => t.id === rightTabId);
+      if (rightTab) navigateTab(rightTab, resolveURL(val));
+    };
+    btn?.addEventListener("click", doGo);
+    input?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") doGo();
+    });
+    if (webviewContainer) webviewContainer.appendChild(homeViewRight);
+  }
+  return homeViewRight!;
+}
+
 function applyLayout() {
   if (!webviewContainer) return;
   if (splitMode) {
@@ -1116,95 +1191,92 @@ function applyLayout() {
       splitDivider.style.left = (splitRatio * 100) + "%";
     }
     if (leftToolbar) {
+      leftToolbar.style.left = "0px";
+      leftToolbar.style.right = "auto";
       leftToolbar.style.width = (splitRatio * 100) + "%";
     }
     if (rightToolbar) {
       rightToolbar.style.left = (splitRatio * 100) + "%";
+      rightToolbar.style.right = "auto";
       rightToolbar.style.width = ((1 - splitRatio) * 100) + "%";
     }
     tabs.forEach((t) => {
       const isLeft = t.id === leftTabId;
       const isRight = t.id === rightTabId;
       if (isLeft || isRight) {
-        t.webview.style.display = "block";
+        t.webview.style.display = "flex";
         t.webview.style.visibility = "visible";
-        t.webview.style.pointerEvents = "auto";
+        t.webview.style.pointerEvents = draggingDivider ? "none" : "auto";
         t.webview.style.zIndex = "2";
+        t.webview.style.top = "44px";
+        t.webview.style.bottom = "0px";
+        t.webview.style.height = "calc(100% - 44px)";
         if (isLeft) {
           t.webview.style.left = "0px";
-          t.webview.style.top = "44px";
-          t.webview.style.bottom = "0px";
+          t.webview.style.right = "auto";
           t.webview.style.width = (splitRatio * 100) + "%";
-          t.webview.style.height = "auto";
         } else {
           t.webview.style.left = (splitRatio * 100) + "%";
-          t.webview.style.top = "44px";
-          t.webview.style.bottom = "0px";
+          t.webview.style.right = "auto";
           t.webview.style.width = ((1 - splitRatio) * 100) + "%";
-          t.webview.style.height = "auto";
         }
       } else {
         t.webview.style.display = "none";
       }
     });
-    const focusedId = focusedPane === "left" ? leftTabId : rightTabId;
-    const focusedTab = tabs.find((t) => t.id === focusedId);
-    if (focusedTab && isHomeUrl(focusedTab.url) && homeView) {
+
+    const leftTab = tabs.find((t) => t.id === leftTabId);
+    const rightTab = tabs.find((t) => t.id === rightTabId);
+    const isLeftHome = !!leftTab && isHomeUrl(leftTab.url);
+    const isRightHome = !!rightTab && isHomeUrl(rightTab.url);
+
+    if (isLeftHome && homeView) {
       homeView.style.display = "flex";
       homeView.style.position = "absolute";
       homeView.style.top = "44px";
       homeView.style.bottom = "0px";
+      homeView.style.left = "0px";
       homeView.style.right = "auto";
-      homeView.style.height = "auto";
-      if (historyView) historyView.style.display = "none";
-      if (favoritesView) favoritesView.style.display = "none";
-      if (focusedPane === "left") {
-        homeView.style.left = "0px";
-        homeView.style.width = (splitRatio * 100) + "%";
-      } else {
-        homeView.style.left = (splitRatio * 100) + "%";
-        homeView.style.width = ((1 - splitRatio) * 100) + "%";
-      }
-    } else if (homeView) {
+      homeView.style.width = (splitRatio * 100) + "%";
+      homeView.style.height = "calc(100% - 44px)";
+      homeView.style.zIndex = "3";
+    } else if (!isLeftHome && !isRightHome && homeView) {
       homeView.style.display = "none";
     }
-    if (focusedTab && isHistoryUrl(focusedTab.url) && historyView) {
-      historyView.style.display = "flex";
-      historyView.style.position = "absolute";
-      historyView.style.top = "44px";
-      historyView.style.bottom = "0px";
-      historyView.style.right = "auto";
-      historyView.style.height = "auto";
-      if (focusedPane === "left") {
-        historyView.style.left = "0px";
-        historyView.style.width = (splitRatio * 100) + "%";
+
+    if (isRightHome) {
+      if (!isLeftHome && homeView) {
+        homeView.style.display = "flex";
+        homeView.style.position = "absolute";
+        homeView.style.top = "44px";
+        homeView.style.bottom = "0px";
+        homeView.style.left = (splitRatio * 100) + "%";
+        homeView.style.right = "auto";
+        homeView.style.width = ((1 - splitRatio) * 100) + "%";
+        homeView.style.height = "calc(100% - 44px)";
+        homeView.style.zIndex = "3";
+        if (homeViewRight) homeViewRight.style.display = "none";
       } else {
-        historyView.style.left = (splitRatio * 100) + "%";
-        historyView.style.width = ((1 - splitRatio) * 100) + "%";
+        const hvRight = getHomeViewRight();
+        hvRight.style.display = "flex";
+        hvRight.style.position = "absolute";
+        hvRight.style.top = "44px";
+        hvRight.style.bottom = "0px";
+        hvRight.style.left = (splitRatio * 100) + "%";
+        hvRight.style.right = "auto";
+        hvRight.style.width = ((1 - splitRatio) * 100) + "%";
+        hvRight.style.height = "calc(100% - 44px)";
+        hvRight.style.zIndex = "3";
       }
-    } else if (historyView) {
-      historyView.style.display = "none";
+    } else if (homeViewRight) {
+      homeViewRight.style.display = "none";
     }
-    if (focusedTab && isFavoritesUrl(focusedTab.url) && favoritesView) {
-      favoritesView.style.display = "flex";
-      favoritesView.style.position = "absolute";
-      favoritesView.style.top = "44px";
-      favoritesView.style.bottom = "0px";
-      favoritesView.style.right = "auto";
-      favoritesView.style.height = "auto";
-      if (focusedPane === "left") {
-        favoritesView.style.left = "0px";
-        favoritesView.style.width = (splitRatio * 100) + "%";
-      } else {
-        favoritesView.style.left = (splitRatio * 100) + "%";
-        favoritesView.style.width = ((1 - splitRatio) * 100) + "%";
-      }
-      renderFavorites();
-    } else if (favoritesView) {
-      favoritesView.style.display = "none";
-    }
+
+    if (historyView) historyView.style.display = "none";
+    if (favoritesView) favoritesView.style.display = "none";
   } else {
     if (splitDivider) splitDivider.style.display = "none";
+    if (homeViewRight) homeViewRight.style.display = "none";
     if (homeView) {
       homeView.style.left = "";
       homeView.style.top = "";
@@ -1225,12 +1297,14 @@ function applyLayout() {
     }
     tabs.forEach((t) => {
       const isActive = t.id === activeTabId;
-      t.webview.style.display = "block";
+      t.webview.style.display = "flex";
       t.webview.style.visibility = isActive ? "visible" : "hidden";
       t.webview.style.zIndex = isActive ? "2" : "0";
       t.webview.style.pointerEvents = isActive ? "auto" : "none";
       t.webview.style.left = "0px";
       t.webview.style.top = "0px";
+      t.webview.style.right = "0px";
+      t.webview.style.bottom = "0px";
       t.webview.style.width = "100%";
       t.webview.style.height = "100%";
     });
@@ -1392,6 +1466,28 @@ function createPaneToolbar(side: "left" | "right"): HTMLElement {
   bar.appendChild(goB);
   bar.appendChild(favB);
 
+  bar.addEventListener("mousedown", () => {
+    focusedPane = side;
+    activeTabId = side === "left" ? leftTabId : rightTabId;
+    tabs.forEach((t) => updateTabUI(t));
+  });
+
+  input.addEventListener("focus", () => {
+    focusedPane = side;
+    activeTabId = side === "left" ? leftTabId : rightTabId;
+    tabs.forEach((t) => updateTabUI(t));
+  });
+
+  input.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    focusedPane = side;
+    activeTabId = side === "left" ? leftTabId : rightTabId;
+    tabs.forEach((t) => updateTabUI(t));
+    const hasSelection = (input.selectionEnd ?? 0) > (input.selectionStart ?? 0);
+    almaAPI?.showAddressContextMenu({ hasSelection });
+  });
+
   const getTab = () => tabs.find((t) => t.id === (side === "left" ? leftTabId : rightTabId)) ?? null;
 
   backB.addEventListener("click", () => {
@@ -1427,20 +1523,31 @@ function createPaneToolbar(side: "left" | "right"): HTMLElement {
   favB.addEventListener("click", () => {
     const tab = getTab();
     if (tab) {
-      const wasFav = isFavoriteUrlSaved(tab.url);
       toggleFavorite(tab.url, tab.title);
-      const outline = favB.querySelector(".favorite-star-outline") as HTMLImageElement | null;
-      const filled = favB.querySelector(".favorite-star-filled") as HTMLImageElement | null;
-      if (outline) outline.style.display = wasFav ? "" : "none";
-      if (filled) filled.style.display = wasFav ? "none" : "";
     }
     updateFavoriteButtons();
   });
 
-  // sync input when tab changes
+  // sync input and buttons when tab changes
   (bar as any)._sync = () => {
     const tab = getTab();
-    if (tab) input.value = tab.url;
+    if (tab) {
+      input.value = isHomeUrl(tab.url) ? "" : tab.url;
+      try {
+        if (typeof tab.webview?.canGoBack === "function") {
+          const canBack = tab.webview.canGoBack();
+          backB.disabled = !canBack;
+          backB.style.opacity = canBack ? "1" : "0.5";
+        }
+        if (typeof tab.webview?.canGoForward === "function") {
+          const canFwd = tab.webview.canGoForward();
+          fwdB.disabled = !canFwd;
+          fwdB.style.opacity = canFwd ? "1" : "0.5";
+        }
+      } catch {
+        // ignore
+      }
+    }
     updateFavoriteButtons();
   };
 
@@ -1457,12 +1564,7 @@ if (favoriteBtn) {
   favoriteBtn.addEventListener("click", () => {
     const tab = getActiveTab();
     if (!tab) return;
-    const wasFav = isFavoriteUrlSaved(tab.url);
     toggleFavorite(tab.url, tab.title);
-    const outline = favoriteBtn.querySelector(".favorite-star-outline") as HTMLImageElement | null;
-    const filled = favoriteBtn.querySelector(".favorite-star-filled") as HTMLImageElement | null;
-    if (outline) outline.style.display = wasFav ? "" : "none";
-    if (filled) filled.style.display = wasFav ? "none" : "";
     updateFavoriteButtons();
   });
 }
@@ -1474,32 +1576,112 @@ if (splitBtn) {
   });
 }
 
+function startDividerDrag(e: MouseEvent | PointerEvent) {
+  if (!splitMode) return;
+  draggingDivider = true;
+  if (splitDivider) {
+    splitDivider.classList.add("dragging");
+    try {
+      if ("setPointerCapture" in splitDivider && "pointerId" in e) {
+        splitDivider.setPointerCapture((e as PointerEvent).pointerId);
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (!dragOverlayEl) {
+    dragOverlayEl = document.createElement("div");
+    dragOverlayEl.id = "split-drag-overlay";
+    dragOverlayEl.style.position = "fixed";
+    dragOverlayEl.style.inset = "0";
+    dragOverlayEl.style.zIndex = "999999";
+    dragOverlayEl.style.cursor = "col-resize";
+    dragOverlayEl.style.userSelect = "none";
+    document.body.appendChild(dragOverlayEl);
+  }
+  document.querySelectorAll("webview").forEach((wv) => {
+    (wv as HTMLElement).style.pointerEvents = "none";
+  });
+}
+
+function updateDividerDrag(clientX: number) {
+  if (!draggingDivider || !splitMode || !webviewContainer) return;
+  const rect = webviewContainer.getBoundingClientRect();
+  let ratio = (clientX - rect.left) / rect.width;
+  ratio = Math.min(0.85, Math.max(0.15, ratio));
+  splitRatio = ratio;
+  try {
+    localStorage.setItem("alma:splitRatio", String(splitRatio));
+  } catch {
+    // ignore
+  }
+  applyLayout();
+}
+
+function stopDividerDrag(e?: MouseEvent | PointerEvent) {
+  if (!draggingDivider) return;
+  draggingDivider = false;
+  if (splitDivider) {
+    splitDivider.classList.remove("dragging");
+    try {
+      if (e && "releasePointerCapture" in splitDivider && "pointerId" in e) {
+        splitDivider.releasePointerCapture((e as PointerEvent).pointerId);
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (dragOverlayEl) {
+    dragOverlayEl.remove();
+    dragOverlayEl = null;
+  }
+  document.querySelectorAll("webview").forEach((wv) => {
+    (wv as HTMLElement).style.pointerEvents = "auto";
+  });
+}
+
 if (splitDivider) {
-  let draggingDivider = false;
-  splitDivider.addEventListener("mousedown", (e) => {
-    draggingDivider = true;
+  splitDivider.addEventListener("pointerdown", (e: PointerEvent) => {
     e.preventDefault();
+    startDividerDrag(e);
   });
-  window.addEventListener("mousemove", (e) => {
-    if (!draggingDivider || !splitMode || !webviewContainer) return;
-    const rect = webviewContainer.getBoundingClientRect();
-    let ratio = (e.clientX - rect.left) / rect.width;
-    ratio = Math.min(0.8, Math.max(0.2, ratio));
-    splitRatio = ratio;
-    applyLayout();
+  splitDivider.addEventListener("mousedown", (e: MouseEvent) => {
+    e.preventDefault();
+    startDividerDrag(e);
   });
-  window.addEventListener("mouseup", () => {
-    draggingDivider = false;
+
+  window.addEventListener("pointermove", (e: PointerEvent) => {
+    if (draggingDivider) {
+      e.preventDefault();
+      updateDividerDrag(e.clientX);
+    }
+  });
+  window.addEventListener("mousemove", (e: MouseEvent) => {
+    if (draggingDivider) {
+      e.preventDefault();
+      updateDividerDrag(e.clientX);
+    }
+  });
+
+  window.addEventListener("pointerup", (e: PointerEvent) => {
+    stopDividerDrag(e);
+  });
+  window.addEventListener("pointercancel", (e: PointerEvent) => {
+    stopDividerDrag(e);
+  });
+  window.addEventListener("mouseup", (e: MouseEvent) => {
+    stopDividerDrag(e);
   });
 }
 
 if (webviewContainer) {
-  webviewContainer.addEventListener("click", (e) => {
+  webviewContainer.addEventListener("mousedown", (e) => {
     if (!splitMode) return;
     const rect = webviewContainer.getBoundingClientRect();
     const x = e.clientX - rect.left;
     focusedPane = x < splitRatio * rect.width ? "left" : "right";
-    applyLayout();
+    activeTabId = focusedPane === "left" ? leftTabId : rightTabId;
+    tabs.forEach((t) => updateTabUI(t));
   });
 }
 
@@ -1544,5 +1726,13 @@ if (almaAPI?.onDragHandled) {
 renderFavorites();
 updateFavoriteButtons();
 
-// Initial restore
-restoreTabs();
+// Initial restore or clean new window tab
+const urlParams = new URLSearchParams(window.location.search);
+const isNewWindow = urlParams.get("newWindow") === "1";
+if (isNewWindow) {
+  // Always open a fresh home tab - ignore the file:// initialUrl from main
+  // because the renderer HOME_URL constant is what drives the home view overlay
+  createTab(HOME_URL, true);
+} else {
+  restoreTabs();
+}
