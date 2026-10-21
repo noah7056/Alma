@@ -742,6 +742,221 @@ body {
   margin: 12px 0 6px;
 }
 
+.fav-item-row[draggable="true"] {
+  cursor: grab;
+}
+
+.fav-item-row.fav-dragging {
+  opacity: 0.35;
+  background: var(--surface-hover);
+}
+
+.fav-folder-section.fav-drop-target {
+  border-color: var(--accent) !important;
+  background: color-mix(in srgb, var(--tint) 20%, var(--surface)) !important;
+}
+
+.fav-unfiled-dropzone {
+  min-height: 28px;
+  border-radius: 8px;
+}
+
+.fav-unfiled-dropzone.fav-drop-target {
+  border: 1.5px dashed var(--accent) !important;
+  background: color-mix(in srgb, var(--tint) 16%, var(--surface)) !important;
+}
+
+/* ---- Home Top Bar & Apps Launcher ---- */
+.home-top-bar {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  z-index: 20;
+}
+
+.apps-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.apps-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+}
+
+.apps-btn img {
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.apps-btn:hover img {
+  opacity: 1;
+}
+
+[data-theme="dark"] .apps-btn img {
+  filter: brightness(0) invert(1);
+}
+
+.apps-panel {
+  position: absolute;
+  top: 44px;
+  right: 0;
+  width: 220px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+  z-index: 30;
+}
+
+[data-theme="dark"] .apps-panel {
+  background: rgba(36, 36, 38, 0.96);
+  border-color: #38383a;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+
+.apps-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.app-item:hover {
+  background: color-mix(in srgb, var(--tint) 10%, var(--surface-hover));
+  border-color: color-mix(in srgb, var(--tint) 20%, var(--border));
+}
+
+.app-icon-wrapper {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.app-icon-wrapper img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.app-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* ---- Native Spaces (Documents, Sheets, Presentations) ---- */
+.native-space-view {
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+}
+
+.native-space-container {
+  max-width: 680px;
+  width: 100%;
+  padding: 32px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.native-space-icon {
+  width: 56px;
+  height: 56px;
+  margin-bottom: 12px;
+}
+
+.native-space-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+
+.native-space-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+
+.native-space-card {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.native-space-actions {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.native-space-btn {
+  height: 38px;
+  padding: 0 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border);
+}
+
+.native-space-btn.primary {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+}
+
+.native-space-btn.primary:hover {
+  opacity: 0.9;
+}
+
+.native-space-empty {
+  padding: 24px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  border-top: 1px dashed var(--border);
+}
+
 
 /* ---- Dark mode icon visibility ---- */
 [data-theme="dark"] .toolbar button img,

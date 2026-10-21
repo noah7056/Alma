@@ -19,6 +19,8 @@ const _en = {
   languageTitle: "Language", systemLanguage: "System (auto)", remove: "Remove",
   addShortcut: "Add shortcut", shortcutName: "Name", shortcutLink: "Link",
   cancel: "Cancel", confirm: "Add",
+  folder: "Folder", link: "Link",
+  documents: "Documents", sheets: "Sheets", presentations: "Presentations",
 };
 const _it: Locale = {
   back: "Indietro", forward: "Avanti", reload: "Ricarica", home: "Home",
@@ -36,6 +38,8 @@ const _it: Locale = {
   languageTitle: "Lingua", systemLanguage: "Sistema (automatico)", remove: "Rimuovi",
   addShortcut: "Aggiungi", shortcutName: "Nome", shortcutLink: "Link",
   cancel: "Annulla", confirm: "Aggiungi",
+  folder: "Cartella", link: "Link",
+  documents: "Documenti", sheets: "Fogli", presentations: "Presentazioni",
 };
 const _zh: Locale = {
   back: "返回", forward: "前进", reload: "刷新", home: "主页",
@@ -53,6 +57,8 @@ const _zh: Locale = {
   languageTitle: "语言", systemLanguage: "系统（自动）", remove: "删除",
   addShortcut: "添加快捷方式", shortcutName: "名称", shortcutLink: "链接",
   cancel: "取消", confirm: "添加",
+  folder: "文件夹", link: "链接",
+  documents: "文档", sheets: "表格", presentations: "演示文稿",
 };
 const _locales: Record<LangCode, Locale> = { en: _en, it: _it, zh: _zh };
 
@@ -152,6 +158,12 @@ function applyLocale(): void {
   setText("#confirm-shortcut-btn", t.confirm);
   renderShortcuts();
 
+  // Favorites folder & link buttons
+  setText("#new-folder-btn", "+ " + (t.folder || "Folder"));
+  setText("#new-folder-btn-page", "+ " + (t.folder || "Folder"));
+  setText("#new-link-btn", "+ " + (t.link || "Link"));
+  setText("#new-link-btn-page", "+ " + (t.link || "Link"));
+
   // Language option active highlight
   document.querySelectorAll<HTMLButtonElement>(".lang-option").forEach(btn => {
     const active = btn.dataset.lang === saved;
@@ -168,6 +180,9 @@ function setText(selector: string, text: string): void {
 const HOME_URL = "home.html";
 const HISTORY_URL = "history.html";
 const FAVORITES_URL = "favorites.html";
+const DOCUMENTS_URL = "documents.html";
+const SHEETS_URL = "sheets.html";
+const PRESENTATIONS_URL = "presentations.html";
 
 const backBtn = document.getElementById("back") as HTMLButtonElement;
 const forwardBtn = document.getElementById("forward") as HTMLButtonElement;
@@ -181,6 +196,9 @@ const statusEl = document.getElementById("status") as HTMLElement | null;
 const homeView = document.getElementById("home-view") as HTMLElement | null;
 const historyView = document.getElementById("history-view") as HTMLElement | null;
 const favoritesView = document.getElementById("favorites-view") as HTMLElement | null;
+const documentsView = document.getElementById("documents-view") as HTMLElement | null;
+const sheetsView = document.getElementById("sheets-view") as HTMLElement | null;
+const presentationsView = document.getElementById("presentations-view") as HTMLElement | null;
 const tabsContainer = document.getElementById("tabs") as HTMLElement | null;
 const newTabBtn = document.getElementById("new-tab") as HTMLButtonElement | null;
 const splitBtn = document.getElementById("split-view") as HTMLButtonElement | null;
@@ -371,10 +389,25 @@ function isFavoritesUrl(url: string): boolean {
   return url === FAVORITES_URL || /^https?:\/\/favorites\.html$/i.test(url);
 }
 
+function isDocumentsUrl(url: string): boolean {
+  return url === DOCUMENTS_URL || /^https?:\/\/documents\.html$/i.test(url) || url === "alma://documents";
+}
+
+function isSheetsUrl(url: string): boolean {
+  return url === SHEETS_URL || /^https?:\/\/sheets\.html$/i.test(url) || url === "alma://sheets";
+}
+
+function isPresentationsUrl(url: string): boolean {
+  return url === PRESENTATIONS_URL || /^https?:\/\/presentations\.html$/i.test(url) || url === "alma://presentations";
+}
+
 function friendlyTabTitle(url: string): string {
   if (isHomeUrl(url)) return "Home";
   if (isHistoryUrl(url)) return "History";
   if (isFavoritesUrl(url)) return "Favorites";
+  if (isDocumentsUrl(url)) return "Documents";
+  if (isSheetsUrl(url)) return "Sheets";
+  if (isPresentationsUrl(url)) return "Presentations";
   if (/google\.[^/]*\/search/i.test(url)) return "Search";
   try {
     const u = new URL(url);
@@ -383,6 +416,28 @@ function friendlyTabTitle(url: string): string {
   } catch {
     return url === "about:blank" ? "Home" : url;
   }
+}
+
+function syncInternalView(url: string) {
+  const isHome = isHomeUrl(url);
+  const isHist = isHistoryUrl(url);
+  const isFav = isFavoritesUrl(url);
+  const isDoc = isDocumentsUrl(url);
+  const isSheet = isSheetsUrl(url);
+  const isPres = isPresentationsUrl(url);
+
+  if (homeView) homeView.style.display = isHome ? "flex" : "none";
+  if (historyView) {
+    historyView.style.display = isHist ? "flex" : "none";
+    if (isHist) renderHistory();
+  }
+  if (favoritesView) {
+    favoritesView.style.display = isFav ? "flex" : "none";
+    if (isFav) renderFavorites();
+  }
+  if (documentsView) documentsView.style.display = isDoc ? "flex" : "none";
+  if (sheetsView) sheetsView.style.display = isSheet ? "flex" : "none";
+  if (presentationsView) presentationsView.style.display = isPres ? "flex" : "none";
 }
 
 function getActiveTab(): Tab | null {
@@ -444,25 +499,7 @@ function attachWebviewEvents(tab: Tab) {
     tab.initialAboutBlankPending = false;
     if (tab.id === activeTabId || (splitMode && (tab.id === leftTabId || tab.id === rightTabId))) {
       if (!splitMode) {
-        if (isHomeUrl(tab.url)) {
-          if (homeView) homeView.style.display = "flex";
-          if (historyView) historyView.style.display = "none";
-          if (favoritesView) favoritesView.style.display = "none";
-        } else if (isHistoryUrl(tab.url)) {
-          if (homeView) homeView.style.display = "none";
-          if (historyView) historyView.style.display = "flex";
-          if (favoritesView) favoritesView.style.display = "none";
-          renderHistory();
-        } else if (isFavoritesUrl(tab.url)) {
-          if (homeView) homeView.style.display = "none";
-          if (historyView) historyView.style.display = "none";
-          if (favoritesView) favoritesView.style.display = "flex";
-          renderFavorites();
-        } else {
-          if (homeView) homeView.style.display = "none";
-          if (historyView) historyView.style.display = "none";
-          if (favoritesView) favoritesView.style.display = "none";
-        }
+        syncInternalView(tab.url);
         addressInput.value = tab.url;
       }
       syncNavState();
@@ -479,25 +516,7 @@ function attachWebviewEvents(tab: Tab) {
     tab.initialAboutBlankPending = false;
     if (tab.id === activeTabId || (splitMode && (tab.id === leftTabId || tab.id === rightTabId))) {
       if (!splitMode) {
-        if (isHomeUrl(tab.url)) {
-          if (homeView) homeView.style.display = "flex";
-          if (historyView) historyView.style.display = "none";
-          if (favoritesView) favoritesView.style.display = "none";
-        } else if (isHistoryUrl(tab.url)) {
-          if (homeView) homeView.style.display = "none";
-          if (historyView) historyView.style.display = "flex";
-          if (favoritesView) favoritesView.style.display = "none";
-          renderHistory();
-        } else if (isFavoritesUrl(tab.url)) {
-          if (homeView) homeView.style.display = "none";
-          if (historyView) historyView.style.display = "none";
-          if (favoritesView) favoritesView.style.display = "flex";
-          renderFavorites();
-        } else {
-          if (homeView) homeView.style.display = "none";
-          if (historyView) historyView.style.display = "none";
-          if (favoritesView) favoritesView.style.display = "none";
-        }
+        syncInternalView(tab.url);
         addressInput.value = tab.url;
       }
       syncNavState();
@@ -741,25 +760,7 @@ function switchTab(id: number) {
     t.webview.style.pointerEvents = t.id === id ? "auto" : "none";
     updateTabUI(t);
   });
-  if (isHomeUrl(tab.url)) {
-    if (homeView) homeView.style.display = "flex";
-    if (historyView) historyView.style.display = "none";
-    if (favoritesView) favoritesView.style.display = "none";
-  } else if (isHistoryUrl(tab.url)) {
-    if (homeView) homeView.style.display = "none";
-    if (historyView) historyView.style.display = "flex";
-    if (favoritesView) favoritesView.style.display = "none";
-    renderHistory();
-  } else if (isFavoritesUrl(tab.url)) {
-    if (homeView) homeView.style.display = "none";
-    if (historyView) historyView.style.display = "none";
-    if (favoritesView) favoritesView.style.display = "flex";
-    renderFavorites();
-  } else {
-    if (homeView) homeView.style.display = "none";
-    if (historyView) historyView.style.display = "none";
-    if (favoritesView) favoritesView.style.display = "none";
-  }
+  syncInternalView(tab.url);
   addressInput.value = tab.url;
   syncNavState();
   updateFavoriteButtons();
@@ -772,7 +773,7 @@ interface ClosedTabRecord {
 const recentlyClosedTabs: ClosedTabRecord[] = [];
 
 function recordClosedTab(url: string, title: string) {
-  if (!url || isHomeUrl(url) || url === "about:blank") return;
+  if (!url || isHomeUrl(url) || url === "about:blank" || isDocumentsUrl(url) || isSheetsUrl(url) || isPresentationsUrl(url)) return;
   recentlyClosedTabs.unshift({ url, title });
   if (recentlyClosedTabs.length > 30) recentlyClosedTabs.pop();
 }
@@ -856,7 +857,7 @@ function persistTabs() {
 }
 
 function recordHistory(url: string, title: string) {
-  if (isHomeUrl(url) || isHistoryUrl(url) || isFavoritesUrl(url)) return;
+  if (isHomeUrl(url) || isHistoryUrl(url) || isFavoritesUrl(url) || isDocumentsUrl(url) || isSheetsUrl(url) || isPresentationsUrl(url)) return;
   let list: { url: string; title: string; time: number }[] = [];
   try { list = JSON.parse(localStorage.getItem("alma:history") || "[]"); } catch { list = []; }
   list = list.filter((e) => e.url !== url);
@@ -941,7 +942,7 @@ function isFavoriteUrlSaved(url: string): boolean {
   return getFavorites().some((f) => normalizeUrl(f.url) === norm);
 }
 function addFavorite(url: string, title: string, folderId?: string) {
-  if (!url || isHomeUrl(url) || isHistoryUrl(url) || isFavoritesUrl(url)) return;
+  if (!url || isHomeUrl(url) || isHistoryUrl(url) || isFavoritesUrl(url) || isDocumentsUrl(url) || isSheetsUrl(url) || isPresentationsUrl(url)) return;
   const norm = normalizeUrl(url);
   const favs = getFavorites();
   if (favs.some((f) => normalizeUrl(f.url) === norm)) return;
@@ -982,7 +983,7 @@ function renderFavoriteRow(item: FavoriteItem, folders: FavoriteFolder[]): strin
   ].join("");
 
   return `
-    <div class="fav-item-row" data-url="${encodeURIComponent(item.url)}">
+    <div class="fav-item-row" draggable="true" data-fav-url="${encodeURIComponent(item.url)}">
       <a href="${item.url}" data-url="${item.url}" class="fav-item-link" title="${item.title}">${item.title}</a>
       ${folders.length > 0 ? `<select class="fav-move-select" data-url="${encodeURIComponent(item.url)}" title="Move to folder">${folderOptions}</select>` : ""}
       <button data-remove="${encodeURIComponent(item.url)}" class="settings-btn" style="width:auto;padding:2px 8px;font-size:12px;">Remove</button>
@@ -1022,7 +1023,7 @@ function renderFavorites() {
           ${isOpen ? `
             <div class="fav-folder-items">
               ${folderFavs.length === 0
-                ? `<div style="padding:8px 4px;color:var(--text-secondary);font-size:12px;font-style:italic;">Empty folder</div>`
+                ? `<div style="padding:8px 4px;color:var(--text-secondary);font-size:12px;font-style:italic;">Empty folder (drag links here)</div>`
                 : folderFavs.map(f => renderFavoriteRow(f, folders)).join("")}
             </div>
           ` : ""}
@@ -1032,11 +1033,17 @@ function renderFavorites() {
 
     // 2. Unfiled items
     const unfiledFavs = favs.filter(f => !f.folderId || !folders.some(fd => fd.id === f.folderId));
-    if (unfiledFavs.length > 0) {
-      if (folders.length > 0) {
-        html += `<div class="fav-section-label">Unfiled Favorites (${unfiledFavs.length})</div>`;
-      }
-      html += `<div class="fav-unfiled-items">${unfiledFavs.map(f => renderFavoriteRow(f, folders)).join("")}</div>`;
+    if (folders.length > 0 || unfiledFavs.length > 0) {
+      html += `
+        <div class="fav-unfiled-dropzone" data-drop-unfiled="true">
+          ${folders.length > 0 ? `<div class="fav-section-label">Unfiled Favorites (${unfiledFavs.length})</div>` : ""}
+          <div class="fav-unfiled-items">
+            ${unfiledFavs.length === 0 && folders.length > 0
+              ? `<div style="padding:6px 4px;color:var(--text-secondary);font-size:12px;font-style:italic;">Drag links here to unfile</div>`
+              : unfiledFavs.map(f => renderFavoriteRow(f, folders)).join("")}
+          </div>
+        </div>
+      `;
     }
 
     container.innerHTML = html;
@@ -1103,13 +1110,75 @@ function renderFavorites() {
         deleteFavoriteFolder(folderId);
       });
     });
+
+    // Drag and Drop for favorites across folders
+    container.querySelectorAll<HTMLElement>(".fav-item-row[draggable='true']").forEach(row => {
+      row.addEventListener("dragstart", (e) => {
+        const url = row.getAttribute("data-fav-url");
+        if (!url) return;
+        row.classList.add("fav-dragging");
+        e.dataTransfer?.setData("text/alma-fav-url", url);
+        e.dataTransfer?.setData("text/plain", decodeURIComponent(url));
+        if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+      });
+
+      row.addEventListener("dragend", () => {
+        row.classList.remove("fav-dragging");
+        container.querySelectorAll(".fav-drop-target").forEach(el => el.classList.remove("fav-drop-target"));
+      });
+    });
+
+    const setupDropTarget = (targetEl: HTMLElement, targetFolderId: string | undefined) => {
+      targetEl.addEventListener("dragover", (e) => {
+        if (e.dataTransfer?.types.includes("text/alma-fav-url")) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.dataTransfer.dropEffect = "move";
+          targetEl.classList.add("fav-drop-target");
+        }
+      });
+
+      targetEl.addEventListener("dragleave", (e) => {
+        if (!targetEl.contains(e.relatedTarget as Node)) {
+          targetEl.classList.remove("fav-drop-target");
+        }
+      });
+
+      targetEl.addEventListener("drop", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        targetEl.classList.remove("fav-drop-target");
+        const encodedUrl = e.dataTransfer?.getData("text/alma-fav-url");
+        if (!encodedUrl) return;
+        const url = decodeURIComponent(encodedUrl);
+        const currentFavs = getFavorites();
+        const targetFav = currentFavs.find(f => normalizeUrl(f.url) === normalizeUrl(url));
+        if (targetFav) {
+          targetFav.folderId = targetFolderId;
+          setFavorites(currentFavs);
+          if (targetFolderId) {
+            openFolderIds.add(targetFolderId);
+          }
+          renderFavorites();
+        }
+      });
+    };
+
+    container.querySelectorAll<HTMLElement>(".fav-folder-section").forEach(sec => {
+      const folderId = sec.getAttribute("data-folder-id");
+      if (folderId) setupDropTarget(sec, folderId);
+    });
+
+    container.querySelectorAll<HTMLElement>(".fav-unfiled-dropzone").forEach(dropzone => {
+      setupDropTarget(dropzone, undefined);
+    });
   };
 
   render("favorites-list");
   render("favorites-list-page");
 }
 
-function setupFolderForm(btnId: string, formId: string, inputId: string, cancelId: string, saveId: string) {
+function setupFolderForm(btnId: string, formId: string, inputId: string, cancelId: string, saveId: string, alternateFormId?: string) {
   const btn = document.getElementById(btnId);
   const form = document.getElementById(formId);
   const input = document.getElementById(inputId) as HTMLInputElement | null;
@@ -1120,9 +1189,15 @@ function setupFolderForm(btnId: string, formId: string, inputId: string, cancelI
     btn.addEventListener("click", () => {
       const isVisible = form.style.display !== "none";
       form.style.display = isVisible ? "none" : "flex";
-      if (!isVisible && input) {
-        input.value = "";
-        input.focus();
+      if (!isVisible) {
+        if (alternateFormId) {
+          const alt = document.getElementById(alternateFormId);
+          if (alt) alt.style.display = "none";
+        }
+        if (input) {
+          input.value = "";
+          input.focus();
+        }
       }
     });
   }
@@ -1154,8 +1229,81 @@ function setupFolderForm(btnId: string, formId: string, inputId: string, cancelI
   }
 }
 
-setupFolderForm("new-folder-btn", "new-folder-form", "new-folder-name", "cancel-folder-btn", "save-folder-btn");
-setupFolderForm("new-folder-btn-page", "new-folder-form-page", "new-folder-name-page", "cancel-folder-btn-page", "save-folder-btn-page");
+function setupLinkForm(btnId: string, formId: string, titleId: string, urlId: string, folderSelectId: string, cancelId: string, saveId: string, alternateFormId?: string) {
+  const btn = document.getElementById(btnId);
+  const form = document.getElementById(formId);
+  const titleInput = document.getElementById(titleId) as HTMLInputElement | null;
+  const urlInput = document.getElementById(urlId) as HTMLInputElement | null;
+  const folderSelect = document.getElementById(folderSelectId) as HTMLSelectElement | null;
+  const cancelBtn = document.getElementById(cancelId);
+  const saveBtn = document.getElementById(saveId);
+
+  const populateFolderSelect = () => {
+    if (!folderSelect) return;
+    const folders = getFavoriteFolders();
+    folderSelect.innerHTML = [
+      `<option value="none">No folder (Unfiled)</option>`,
+      ...folders.map(f => `<option value="${f.id}">📁 ${f.name}</option>`)
+    ].join("");
+  };
+
+  if (btn && form) {
+    btn.addEventListener("click", () => {
+      const isVisible = form.style.display !== "none";
+      form.style.display = isVisible ? "none" : "flex";
+      if (!isVisible) {
+        if (alternateFormId) {
+          const alt = document.getElementById(alternateFormId);
+          if (alt) alt.style.display = "none";
+        }
+        populateFolderSelect();
+        if (titleInput) titleInput.value = "";
+        if (urlInput) {
+          urlInput.value = "";
+          urlInput.focus();
+        }
+      }
+    });
+  }
+
+  const doSave = () => {
+    let rawUrl = urlInput?.value.trim() ?? "";
+    if (!rawUrl) {
+      urlInput?.focus();
+      return;
+    }
+    if (!/^https?:\/\//i.test(rawUrl)) {
+      rawUrl = "https://" + rawUrl;
+    }
+    const title = titleInput?.value.trim() || friendlyTabTitle(rawUrl);
+    const folderId = (folderSelect && folderSelect.value !== "none") ? folderSelect.value : undefined;
+
+    addFavorite(rawUrl, title, folderId);
+    if (titleInput) titleInput.value = "";
+    if (urlInput) urlInput.value = "";
+    if (form) form.style.display = "none";
+    renderFavorites();
+    updateFavoriteButtons();
+  };
+
+  if (saveBtn) saveBtn.addEventListener("click", doSave);
+  if (cancelBtn && form) cancelBtn.addEventListener("click", () => { form.style.display = "none"; });
+  [titleInput, urlInput].forEach((inp) => {
+    inp?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        doSave();
+      } else if (e.key === "Escape" && form) {
+        form.style.display = "none";
+      }
+    });
+  });
+}
+
+setupFolderForm("new-folder-btn", "new-folder-form", "new-folder-name", "cancel-folder-btn", "save-folder-btn", "new-link-form");
+setupFolderForm("new-folder-btn-page", "new-folder-form-page", "new-folder-name-page", "cancel-folder-btn-page", "save-folder-btn-page", "new-link-form-page");
+setupLinkForm("new-link-btn", "new-link-form", "new-link-title", "new-link-url", "new-link-folder", "cancel-link-btn", "save-link-btn", "new-folder-form");
+setupLinkForm("new-link-btn-page", "new-link-form-page", "new-link-title-page", "new-link-url-page", "new-link-folder-page", "cancel-link-btn-page", "save-link-btn-page", "new-folder-form-page");
 
 function updateFavoriteButtons() {
   const setBtn = (btn: HTMLButtonElement | null, url: string | null) => {
@@ -1312,9 +1460,7 @@ function navigateTab(tab: Tab, target: string) {
       tab.webview.src = "about:blank";
     }
     if (tab.id === activeTabId) {
-      if (homeView) homeView.style.display = "flex";
-      if (historyView) historyView.style.display = "none";
-      if (favoritesView) favoritesView.style.display = "none";
+      syncInternalView(HOME_URL);
       addressInput.value = HOME_URL;
       syncNavState();
     }
@@ -1326,10 +1472,7 @@ function navigateTab(tab: Tab, target: string) {
     tab.url = HISTORY_URL;
     tab.title = "History";
     if (tab.id === activeTabId) {
-      if (homeView) homeView.style.display = "none";
-      if (historyView) historyView.style.display = "flex";
-      if (favoritesView) favoritesView.style.display = "none";
-      renderHistory();
+      syncInternalView(HISTORY_URL);
       addressInput.value = HISTORY_URL;
       syncNavState();
     }
@@ -1341,11 +1484,44 @@ function navigateTab(tab: Tab, target: string) {
     tab.url = FAVORITES_URL;
     tab.title = "Favorites";
     if (tab.id === activeTabId) {
-      if (homeView) homeView.style.display = "none";
-      if (historyView) historyView.style.display = "none";
-      if (favoritesView) favoritesView.style.display = "flex";
-      renderFavorites();
+      syncInternalView(FAVORITES_URL);
       addressInput.value = FAVORITES_URL;
+      syncNavState();
+    }
+    if (splitMode) applyLayout();
+    updateTabUI(tab);
+    return;
+  }
+  if (isDocumentsUrl(target)) {
+    tab.url = DOCUMENTS_URL;
+    tab.title = "Documents";
+    if (tab.id === activeTabId) {
+      syncInternalView(DOCUMENTS_URL);
+      addressInput.value = DOCUMENTS_URL;
+      syncNavState();
+    }
+    if (splitMode) applyLayout();
+    updateTabUI(tab);
+    return;
+  }
+  if (isSheetsUrl(target)) {
+    tab.url = SHEETS_URL;
+    tab.title = "Sheets";
+    if (tab.id === activeTabId) {
+      syncInternalView(SHEETS_URL);
+      addressInput.value = SHEETS_URL;
+      syncNavState();
+    }
+    if (splitMode) applyLayout();
+    updateTabUI(tab);
+    return;
+  }
+  if (isPresentationsUrl(target)) {
+    tab.url = PRESENTATIONS_URL;
+    tab.title = "Presentations";
+    if (tab.id === activeTabId) {
+      syncInternalView(PRESENTATIONS_URL);
+      addressInput.value = PRESENTATIONS_URL;
       syncNavState();
     }
     if (splitMode) applyLayout();
@@ -1355,9 +1531,7 @@ function navigateTab(tab: Tab, target: string) {
   tab.url = target;
   tab.title = friendlyTabTitle(target);
   if (tab.id === activeTabId) {
-    if (homeView) homeView.style.display = "none";
-    if (historyView) historyView.style.display = "none";
-    if (favoritesView) favoritesView.style.display = "none";
+    syncInternalView(target);
     addressInput.value = target;
   }
   tab.webview.src = target;
@@ -1537,7 +1711,7 @@ if (almaAPI?.onTabAction) {
         if (action === "close") {
           closeTab(tabId);
         } else if (action === "reload") {
-          if (isHomeUrl(tab.url) || isHistoryUrl(tab.url) || isFavoritesUrl(tab.url)) {
+          if (isHomeUrl(tab.url) || isHistoryUrl(tab.url) || isFavoritesUrl(tab.url) || isDocumentsUrl(tab.url) || isSheetsUrl(tab.url) || isPresentationsUrl(tab.url)) {
             if (tab.id === activeTabId) navigateTab(tab, tab.url);
           } else {
             try {
@@ -2005,27 +2179,23 @@ function applyLayout() {
 
     if (historyView) historyView.style.display = "none";
     if (favoritesView) favoritesView.style.display = "none";
+    if (documentsView) documentsView.style.display = "none";
+    if (sheetsView) sheetsView.style.display = "none";
+    if (presentationsView) presentationsView.style.display = "none";
   } else {
     if (splitDivider) splitDivider.style.display = "none";
     if (homeViewRight) homeViewRight.style.display = "none";
-    if (homeView) {
-      homeView.style.left = "";
-      homeView.style.top = "";
-      homeView.style.width = "";
-      homeView.style.height = "";
-      homeView.style.right = "";
-      homeView.style.bottom = "";
-      homeView.style.position = "";
-    }
-    if (historyView) {
-      historyView.style.left = "";
-      historyView.style.top = "";
-      historyView.style.width = "";
-      historyView.style.height = "";
-      historyView.style.right = "";
-      historyView.style.bottom = "";
-      historyView.style.position = "";
-    }
+    [homeView, historyView, favoritesView, documentsView, sheetsView, presentationsView].forEach((v) => {
+      if (v) {
+        v.style.left = "";
+        v.style.top = "";
+        v.style.width = "";
+        v.style.height = "";
+        v.style.right = "";
+        v.style.bottom = "";
+        v.style.position = "";
+      }
+    });
     tabs.forEach((t) => {
       const isActive = t.id === activeTabId;
       t.webview.style.display = "flex";
@@ -2040,12 +2210,7 @@ function applyLayout() {
       t.webview.style.height = "100%";
     });
     const tab = tabs.find((t) => t.id === activeTabId);
-    if (tab && isHomeUrl(tab.url) && homeView) homeView.style.display = "flex";
-    else if (homeView) homeView.style.display = "none";
-    if (tab && isHistoryUrl(tab.url) && historyView) historyView.style.display = "flex";
-    else if (historyView) historyView.style.display = "none";
-    if (tab && isFavoritesUrl(tab.url) && favoritesView) favoritesView.style.display = "flex";
-    else if (favoritesView) favoritesView.style.display = "none";
+    syncInternalView(tab ? tab.url : "");
   }
 }
 
@@ -2452,7 +2617,7 @@ if (almaAPI?.onDragHandled) {
   }
   switchTab(newTab.id);
   // Navigate to the actual URL (not home) after switching
-  if (!isHomeUrl(url) && !isHistoryUrl(url) && !isFavoritesUrl(url)) {
+  if (!isHomeUrl(url)) {
     navigateTab(newTab, url);
   }
   persistTabs();
@@ -2461,6 +2626,51 @@ if (almaAPI?.onDragHandled) {
 
 renderFavorites();
 updateFavoriteButtons();
+
+// ---- Native apps & tools launcher wiring ----
+document.addEventListener("click", (e) => {
+  const target = e.target as HTMLElement;
+  const appsBtn = target.closest(".apps-btn");
+  if (appsBtn) {
+    e.stopPropagation();
+    const topBar = appsBtn.closest(".home-top-bar");
+    const panel = topBar?.querySelector(".apps-panel") as HTMLElement | null;
+    if (panel) {
+      const isVisible = panel.style.display !== "none";
+      panel.style.display = isVisible ? "none" : "block";
+    }
+    return;
+  }
+
+  const appItem = target.closest(".app-item") as HTMLElement | null;
+  if (appItem) {
+    e.stopPropagation();
+    const appType = appItem.getAttribute("data-app");
+    const panel = appItem.closest(".apps-panel") as HTMLElement | null;
+    if (panel) panel.style.display = "none";
+
+    let targetUrl = HOME_URL;
+    if (appType === "documents") targetUrl = DOCUMENTS_URL;
+    else if (appType === "sheets") targetUrl = SHEETS_URL;
+    else if (appType === "presentations") targetUrl = PRESENTATIONS_URL;
+
+    const inRightPane = !!appItem.closest("#home-view-right");
+    if (splitMode && inRightPane) {
+      const rightTab = tabs.find((t) => t.id === rightTabId);
+      if (rightTab) navigateTab(rightTab, targetUrl);
+    } else {
+      navigateTo(targetUrl);
+    }
+    return;
+  }
+
+  // Click outside closes any open apps panels
+  document.querySelectorAll<HTMLElement>(".apps-panel").forEach((p) => {
+    if (!p.contains(target)) {
+      p.style.display = "none";
+    }
+  });
+});
 
 // ---- Language panel ----
 const langPanel = document.getElementById("language-panel");

@@ -45,6 +45,33 @@
   <div class="webview-container" id="webview-container">
     <div id="split-divider" class="split-divider" style="display:none;"></div>
     <div id="home-view" class="home-view">
+      <div class="home-top-bar">
+        <button id="apps-btn" class="apps-btn" aria-label="Apps" title="Apps">
+          <img src="assets/icons/apps.svg" alt="Apps" />
+        </button>
+        <div id="apps-panel" class="apps-panel" style="display:none;">
+          <div class="apps-grid">
+            <button class="app-item" data-app="documents">
+              <div class="app-icon-wrapper">
+                <img src="assets/icons/documents-icon.svg" alt="Documents" />
+              </div>
+              <span class="app-name">Documents</span>
+            </button>
+            <button class="app-item" data-app="sheets">
+              <div class="app-icon-wrapper">
+                <img src="assets/icons/sheets-icon.svg" alt="Sheets" />
+              </div>
+              <span class="app-name">Sheets</span>
+            </button>
+            <button class="app-item" data-app="presentations">
+              <div class="app-icon-wrapper">
+                <img src="assets/icons/presentations-icon.svg" alt="Presentations" />
+              </div>
+              <span class="app-name">Presentations</span>
+            </button>
+          </div>
+        </div>
+      </div>
       <div class="home-container">
         <img class="home-logo" src="assets/icons/alma.svg" alt="Alma" />
         <div class="alma-subtitle">Your personal browser</div>
@@ -70,20 +97,81 @@
       <div class="history-panel">
         <div class="history-header">
           <div class="alma-subtitle">Favorites</div>
-          <div style="display:flex;justify-content:center;margin-top:10px;">
-            <button id="new-folder-btn-page" class="fav-new-folder-btn" style="max-width:200px;">+ New folder</button>
+          <div style="display:flex;gap:8px;justify-content:center;margin-top:10px;">
+            <button id="new-folder-btn-page" class="fav-new-folder-btn" style="max-width:140px;">+ Folder</button>
+            <button id="new-link-btn-page" class="fav-new-folder-btn" style="max-width:140px;">+ Link</button>
           </div>
-          <div id="new-folder-form-page" class="fav-folder-form" style="display:none;max-width:280px;margin:10px auto;">
+          <div id="new-folder-form-page" class="fav-folder-form" style="display:none;max-width:300px;margin:10px auto;">
             <input type="text" id="new-folder-name-page" class="modal-input" placeholder="Folder name" style="height:32px;font-size:13px;" />
             <div style="display:flex;gap:6px;justify-content:flex-end;">
               <button id="cancel-folder-btn-page" class="modal-btn secondary" style="height:28px;padding:0 10px;font-size:12px;">Cancel</button>
               <button id="save-folder-btn-page" class="modal-btn primary" style="height:28px;padding:0 12px;font-size:12px;">Create</button>
             </div>
           </div>
+          <div id="new-link-form-page" class="fav-folder-form" style="display:none;max-width:300px;margin:10px auto;">
+            <input type="text" id="new-link-title-page" class="modal-input" placeholder="Title (e.g. GitHub)" style="height:32px;font-size:13px;" />
+            <input type="text" id="new-link-url-page" class="modal-input" placeholder="https://..." style="height:32px;font-size:13px;" />
+            <select id="new-link-folder-page" class="modal-input" style="height:32px;font-size:13px;"></select>
+            <div style="display:flex;gap:6px;justify-content:flex-end;">
+              <button id="cancel-link-btn-page" class="modal-btn secondary" style="height:28px;padding:0 10px;font-size:12px;">Cancel</button>
+              <button id="save-link-btn-page" class="modal-btn primary" style="height:28px;padding:0 12px;font-size:12px;">Add</button>
+            </div>
+          </div>
         </div>
         <div id="favorites-list-page" class="history-list"></div>
         <div class="history-footer">
           <button id="clear-favorites" class="settings-btn">Clear favorites</button>
+        </div>
+      </div>
+    </div>
+    <div id="documents-view" class="home-view native-space-view" style="display:none;">
+      <div class="native-space-container">
+        <div class="native-space-header">
+          <img class="native-space-icon" src="assets/icons/documents-icon.svg" alt="Documents" />
+          <h1 class="native-space-title">Documents</h1>
+          <p class="native-space-subtitle">Native document workspace in Alma</p>
+        </div>
+        <div class="native-space-card">
+          <div class="native-space-actions">
+            <button class="native-space-btn primary">+ New Document</button>
+          </div>
+          <div class="native-space-empty">
+            <p>Your documents workspace is ready. Native tools under active development.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="sheets-view" class="home-view native-space-view" style="display:none;">
+      <div class="native-space-container">
+        <div class="native-space-header">
+          <img class="native-space-icon" src="assets/icons/sheets-icon.svg" alt="Sheets" />
+          <h1 class="native-space-title">Sheets</h1>
+          <p class="native-space-subtitle">Native spreadsheet workspace in Alma</p>
+        </div>
+        <div class="native-space-card">
+          <div class="native-space-actions">
+            <button class="native-space-btn primary">+ New Spreadsheet</button>
+          </div>
+          <div class="native-space-empty">
+            <p>Your spreadsheet workspace is ready. Native tools under active development.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="presentations-view" class="home-view native-space-view" style="display:none;">
+      <div class="native-space-container">
+        <div class="native-space-header">
+          <img class="native-space-icon" src="assets/icons/presentations-icon.svg" alt="Presentations" />
+          <h1 class="native-space-title">Presentations</h1>
+          <p class="native-space-subtitle">Native presentation workspace in Alma</p>
+        </div>
+        <div class="native-space-card">
+          <div class="native-space-actions">
+            <button class="native-space-btn primary">+ New Presentation</button>
+          </div>
+          <div class="native-space-empty">
+            <p>Your presentations workspace is ready. Native tools under active development.</p>
+          </div>
         </div>
       </div>
     </div>
@@ -137,13 +225,23 @@
       <button id="close-favorites" class="themes-close" aria-label="Close">&#10005;</button>
     </div>
     <div class="fav-toolbar">
-      <button id="new-folder-btn" class="fav-new-folder-btn">+ New folder</button>
+      <button id="new-folder-btn" class="fav-new-folder-btn">+ Folder</button>
+      <button id="new-link-btn" class="fav-new-folder-btn">+ Link</button>
     </div>
     <div id="new-folder-form" class="fav-folder-form" style="display:none;">
       <input type="text" id="new-folder-name" class="modal-input" placeholder="Folder name" style="height:32px;font-size:13px;" />
       <div style="display:flex;gap:6px;justify-content:flex-end;">
         <button id="cancel-folder-btn" class="modal-btn secondary" style="height:28px;padding:0 10px;font-size:12px;">Cancel</button>
         <button id="save-folder-btn" class="modal-btn primary" style="height:28px;padding:0 12px;font-size:12px;">Create</button>
+      </div>
+    </div>
+    <div id="new-link-form" class="fav-folder-form" style="display:none;">
+      <input type="text" id="new-link-title" class="modal-input" placeholder="Title (e.g. GitHub)" style="height:32px;font-size:13px;" />
+      <input type="text" id="new-link-url" class="modal-input" placeholder="https://..." style="height:32px;font-size:13px;" />
+      <select id="new-link-folder" class="modal-input" style="height:32px;font-size:13px;"></select>
+      <div style="display:flex;gap:6px;justify-content:flex-end;">
+        <button id="cancel-link-btn" class="modal-btn secondary" style="height:28px;padding:0 10px;font-size:12px;">Cancel</button>
+        <button id="save-link-btn" class="modal-btn primary" style="height:28px;padding:0 12px;font-size:12px;">Add</button>
       </div>
     </div>
     <div id="favorites-list" class="history-list"></div>
