@@ -14,7 +14,8 @@ Alma/
 ├── src/renderer/index.html # Renderer UI: toolbar, address bar, home view, webview
 ├── src/renderer/home.html  # Custom home page (Alma-branded, Google-powered search)
 ├── src/renderer/renderer.ts# Renderer logic: nav controls, URL resolution, view toggling
-├── src/renderer/styles.css # Toolbar, home page, theme styling
+├── src/renderer/presentations.ts # Alma Presentations: deck editor (slides, canvas, presenter)
+├── src/renderer/styles.css # Toolbar, home page, native apps, theme styling
 ├── src/assets/icons/       # Placeholder SVGs — drop your custom icons here
 │   ├── alma.svg
 │   ├── back.svg
@@ -25,6 +26,45 @@ Alma/
 │   └── theme.svg
 └── README.md
 ```
+
+## UI layout
+
+The renderer is a single shell (title bar → tab strip → toolbar → content area) that
+swaps the content area between views. Every view follows the same rules:
+
+| View | Layout |
+| --- | --- |
+| Home | Centred column: logo, search box, shortcuts; native apps live in the **apps panel** (grid button, top right) |
+| History / Favorites | `page-panel`: title + subtitle header, scrollable list, footer actions |
+| Documents | List page (header + search + grid of documents) and, on click, a full-width editor page |
+| Sheets | Same list-page shell, plus a spreadsheet editor: formula bar, cell grid, sheet tabs |
+| Presentations | Same list-page shell, plus a deck editor: slide filmstrip, 16:9 canvas, formatting toolbar, properties panel, presenter mode |
+
+Native apps share the `.docs-page` shell, so adding a new one is a matter of
+copying the header markup. Opening a document swaps the list page for the
+editor page (`.is-editing` on the view); the back arrow returns to the list.
+
+Sheets follows the same two-page pattern: the list page uses the shared
+`.docs-list` grid, while the editor page is a spreadsheet surface (formula bar,
+`.sheets-grid` table, sheet tabs, status bar). Both live in `renderer.ts`
+under the `// ---- Sheets App ----` section and persist to `localStorage`
+under `alma:sheets`.
+
+Presentations lives in its own module (`src/renderer/presentations.ts`) and
+persists to `alma:presentations`. `renderer.ts` only drives it through the
+`presentationsApp` facade (`onShow`, `isEditing`, `closeEditor`, `setLang`).
+
+### Internal view history
+
+The home page and the native apps are overlays on top of the webview, so the
+webview's own history cannot walk between them. Every tab therefore keeps an
+`internalStack` (plus an `internalForward` for the forward button) of the
+internal views it visited — home, history, favorites, documents, sheets,
+presentations. Back pops that stack, forward replays it, and the back/forward
+buttons are enabled from it instead of from the webview. Opening a native app
+while its editor is open steps back to the app's list first, and only then to
+the home page. Native app visits are recorded in the history list like any
+other page.
 
 ## Scripts
 
@@ -78,6 +118,25 @@ Alma/
 - [x] Reopen closed tabs (`Cmd+Shift+T` / `Ctrl+Shift+T`)
 - [ ] Extension-style content scripts via `webview` preloads
 
+### Phase 6 — Native apps
+- [x] Shared app shell (`.docs-page`): full-width header + content, used by Documents/Sheets/Presentations
+- [x] Native apps launched from the apps panel on the home page
+- [x] Documents: list page with search, rename, delete, relative "edited" times; clicking a document opens a full-width editor page
+- [x] Documents: A4 page (210 × 297 mm) rendered on a canvas, printed/exported as A4
+- [x] Documents: formatting toolbar — block style, font family, font size, bold/italic/underline/strike-through, text colour, highlight, alignment, lists, links, divider, clear formatting, undo/redo
+- [x] Documents: autosave, word count and export (PDF/TXT/HTML/MD)
+- [x] Sheets: list page with search, rename, delete, relative "edited" times; clicking a spreadsheet opens the grid editor
+- [x] Sheets: cell grid with row/column headers, sticky headers, drag-to-resize columns, range selection and keyboard navigation (arrows, Tab, Enter, F2, Delete, Home/End)
+- [x] Sheets: formula engine — arithmetic, comparisons, string concat, cell/range references (including `Sheet2!A1`), and functions (SUM, AVERAGE, MIN, MAX, COUNT, COUNTA, MEDIAN, PRODUCT, ROUND, ABS, SQRT, POWER, MOD, INT, IF, AND, OR, NOT, CONCATENATE, LEN, UPPER, LOWER, TRIM) with circular-reference detection
+- [x] Sheets: formatting toolbar — number format (general/number/thousands/percent/currency/scientific), bold/italic/underline, text and fill colour, alignment; insert/delete rows and columns
+- [x] Sheets: multiple sheet tabs (add/rename/delete/switch), formula bar, live range stats (sum/average/count/min/max), undo/redo, autosave and export (CSV/TSV/JSON/HTML/PDF)
+- [x] Presentations: list page with search, rename, delete, deck preview thumbnails and relative "edited" times; clicking a deck opens the editor
+- [x] Presentations: slide filmstrip with live thumbnails, drag-to-reorder, new/duplicate/delete slide and six layouts (title, title + body, title only, two columns, section header, blank)
+- [x] Presentations: 16:9 slide canvas with text boxes, shapes (rectangle/ellipse/triangle) and images — select, drag, resize from eight handles, double-click to edit text
+- [x] Presentations: formatting toolbar and properties panel (position/size, font size, bold/italic/underline, bullets, alignment, text and fill colour, z-order, duplicate, delete), undo/redo, autosave
+- [x] Presentations: presenter mode (fullscreen, arrow keys, progress bar) and export (PDF/HTML/JSON)
+- [ ] Presentations: speaker notes
+
 ## Running
 
 ```bash
@@ -92,3 +151,5 @@ npm run electron
 - The address bar always resolves to Google for searches, even from the home page.
 - IPC surface: `browser:new-window`, `browser:navigate`, `browser:get-title`, `browser:get-url`, `window:minimize`, `window:maximize`, `window:close`, `window:is-maximized`.
 - Drop your custom icons into `src/assets/icons/` and reference them from `index.html` or `styles.css`.
+- Translations live in two places: `src/renderer/locales/index.ts` and the inlined copy at the top of `src/renderer/renderer.ts` (inlined because the renderer is loaded as a plain ES module). Keep both in sync when adding a string. `src/renderer/presentations.ts` keeps its own string table for the deck editor.
+- The native app names (Documents, Sheets, Presentations) are proper nouns and stay in English in every language.
