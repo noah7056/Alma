@@ -5,6 +5,7 @@
   --text: #1d1d1f;
   --text-secondary: #86868b;
   --accent: #8e8e93;
+  --tint: #8e8e93;
   --border: #d1d1d6;
   --title-bar-bg: #f2f2f7;
   --title-bar-text: #1d1d1f;
@@ -1154,10 +1155,6 @@ img {
 }
 
 /* ---- Themes panel ---- */
-:root {
-  --tint: #8e8e93;
-}
-
 .title-bar {
   background: color-mix(in srgb, var(--tint) 18%, var(--title-bar-bg));
 }
@@ -6312,13 +6309,12 @@ img {
   color: #34c759;
 }
 
-/* Pagination & See More */
+/* Pagination */
 .search-pagination {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 16px;
-  padding: 24px 0 16px;
+  justify-content: center;
+  padding: 28px 0 20px;
 }
 
 .search-see-more-btn {

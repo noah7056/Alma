@@ -8,6 +8,7 @@
 export interface SearchAppOptions {
   onNavigate: (url: string) => void;
   onNewTab: (url: string) => void;
+  onSearchStateChange?: (url: string, title: string) => void;
 }
 
 type SearchTab = "all" | "images";
@@ -61,7 +62,6 @@ export class SearchApp {
   // Web results elements
   private resultsListEl: HTMLElement | null = null;
   private paginationEl: HTMLElement | null = null;
-  private seeMoreBtn: HTMLButtonElement | null = null;
   private pageNumbersEl: HTMLElement | null = null;
 
   // Empty & brand
@@ -105,7 +105,6 @@ export class SearchApp {
 
     this.resultsListEl = document.getElementById("search-results-list");
     this.paginationEl = document.getElementById("search-pagination");
-    this.seeMoreBtn = document.getElementById("search-see-more-btn") as HTMLButtonElement | null;
     this.pageNumbersEl = document.getElementById("search-page-numbers");
 
     this.emptyStateEl = document.getElementById("search-empty-state");
@@ -160,16 +159,6 @@ export class SearchApp {
         const tab = target.getAttribute("data-tab") as SearchTab;
         if (tab) {
           this.setTab(tab);
-        }
-      });
-    }
-
-    // "See more results" button
-    if (this.seeMoreBtn) {
-      this.seeMoreBtn.addEventListener("click", () => {
-        const totalPages = Math.ceil(this.allResults.length / this.pageSize);
-        if (this.currentPage < totalPages) {
-          this.goToPage(this.currentPage + 1);
         }
       });
     }
@@ -232,7 +221,7 @@ export class SearchApp {
     return this.currentQuery;
   }
 
-  onShow(query: string): void {
+  onShow(query: string, initialTab: SearchTab = "all"): void {
     const trimmed = query.trim();
     if (this.searchInputEl) {
       this.searchInputEl.value = trimmed;
@@ -241,8 +230,19 @@ export class SearchApp {
       }
     }
 
+    if (initialTab !== this.currentTab) {
+      this.currentTab = initialTab;
+      if (this.searchTabsEl) {
+        this.searchTabsEl.querySelectorAll(".search-tab").forEach((btn) => {
+          btn.classList.toggle("active", btn.getAttribute("data-tab") === initialTab);
+        });
+      }
+    }
+
     if (trimmed && trimmed !== this.currentQuery) {
       this.executeSearch(trimmed);
+    } else if (trimmed && this.lastResponse) {
+      this.filterViewByTab();
     } else if (!trimmed && !this.lastResponse) {
       this.showEmptyState("What would you like to search for?", "Type your search query above and press Enter to explore the web.");
     }
@@ -256,6 +256,11 @@ export class SearchApp {
       });
     }
     this.filterViewByTab();
+    if (this.currentQuery) {
+      const searchUrl = `search.html?q=${encodeURIComponent(this.currentQuery)}${this.currentTab === "images" ? "&tab=images" : ""}`;
+      const searchTitle = `${this.currentQuery} - Alma ${this.currentTab === "images" ? "Image " : ""}Search`;
+      this.options?.onSearchStateChange?.(searchUrl, searchTitle);
+    }
   }
 
   private filterViewByTab(): void {
@@ -297,12 +302,12 @@ export class SearchApp {
     this.searchViewEl?.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  async executeSearch(query: string): Promise<void> {
+  async executeSearch(query: string, tab: SearchTab = "all"): Promise<void> {
     const trimmed = query.trim();
     if (!trimmed) return;
 
     this.currentQuery = trimmed;
-    this.currentTab = "all";
+    this.currentTab = tab;
     this.currentPage = 1;
     this.currentImagePage = 1;
 
@@ -313,7 +318,7 @@ export class SearchApp {
 
     if (this.searchTabsEl) {
       this.searchTabsEl.querySelectorAll(".search-tab").forEach((btn) => {
-        btn.classList.toggle("active", btn.getAttribute("data-tab") === "all");
+        btn.classList.toggle("active", btn.getAttribute("data-tab") === tab);
       });
     }
 
@@ -321,6 +326,11 @@ export class SearchApp {
     if (addressInput) {
       addressInput.value = trimmed;
     }
+
+    const isImages = tab === "images";
+    const searchUrl = `search.html?q=${encodeURIComponent(trimmed)}${isImages ? "&tab=images" : ""}`;
+    const searchTitle = `${trimmed} - Alma ${isImages ? "Image " : ""}Search`;
+    this.options?.onSearchStateChange?.(searchUrl, searchTitle);
 
     this.showLoading();
 
@@ -370,8 +380,8 @@ export class SearchApp {
     let desc = errorMessage;
 
     if (errorMessage.toLowerCase().includes("api key is missing")) {
-      title = "Tavily API Key Required";
-      desc = "Please add your Tavily API key to the .env file in the Alma project root as TAVILY_API_KEY=your_key, then restart the app.";
+      title = "Search API Key Required";
+      desc = "Please add your Brave Search API key (BRAVE_API_KEY) or Tavily API key (TAVILY_API_KEY) to your .env file in the project root, then restart the app.";
     }
 
     this.showEmptyState(title, desc, true);
@@ -412,6 +422,10 @@ export class SearchApp {
       if (data.answer) {
         this.aiCardEl.style.display = "block";
         this.aiBodyEl.innerHTML = this.formatAiText(data.answer);
+        const providerEl = document.getElementById("search-ai-provider");
+        if (providerEl) {
+          providerEl.textContent = data.provider ? `Powered by ${data.provider}` : "AI Overview";
+        }
       } else {
         this.aiCardEl.style.display = "none";
       }
@@ -476,22 +490,11 @@ export class SearchApp {
       this.resultsListEl?.appendChild(card);
     });
 
-    // Update Pagination & "See more" footer
+    // Update Pagination
     if (this.paginationEl) {
       const totalPages = Math.ceil(this.allResults.length / this.pageSize);
-      if (totalPages > 0) {
+      if (totalPages > 1) {
         this.paginationEl.style.display = "flex";
-
-        // "See more results" button
-        if (this.seeMoreBtn) {
-          if (this.currentPage < totalPages) {
-            this.seeMoreBtn.style.display = "inline-flex";
-            const span = this.seeMoreBtn.querySelector("span");
-            if (span) span.textContent = `See more results (page ${this.currentPage + 1}) \u2192`;
-          } else {
-            this.seeMoreBtn.style.display = "none";
-          }
-        }
 
         // Page number chips
         if (this.pageNumbersEl) {

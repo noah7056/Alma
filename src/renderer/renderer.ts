@@ -521,15 +521,14 @@ window.addEventListener("pagehide", () => {
 const themeLightBtn = document.getElementById("theme-light");
 const themeDarkBtn = document.getElementById("theme-dark");
 function applyTheme(mode: string) {
-  const prevMode = document.documentElement.getAttribute("data-theme") ?? "light";
   window.setTimeout(() => aiApp?.refreshContext(), 0);
-  const prevTint = localStorage.getItem("alma:tint") ?? defaultTintFor(prevMode);
+  const currentSavedTint = localStorage.getItem("alma:tint");
+  const isDefault = !currentSavedTint || DEFAULT_TINTS.has(currentSavedTint);
   document.documentElement.setAttribute("data-theme", mode);
   localStorage.setItem("alma:theme", mode);
-  if (DEFAULT_TINTS.has(prevTint)) {
+  if (isDefault) {
     const newTint = defaultTintFor(mode);
     applyTint(newTint);
-    localStorage.setItem("alma:tint", newTint);
     if (tintInput) tintInput.value = newTint;
   }
 }
@@ -553,11 +552,12 @@ function applyTint(color: string) {
 }
 
 const savedTint = localStorage.getItem("alma:tint");
-if (savedTint) {
+if (savedTint && !DEFAULT_TINTS.has(savedTint)) {
   applyTint(savedTint);
   if (tintInput) tintInput.value = savedTint;
 } else {
   const def = defaultTintFor(savedTheme);
+  applyTint(def);
   if (tintInput) tintInput.value = def;
 }
 
@@ -771,6 +771,10 @@ function friendlyTabTitle(url: string): string {
   if (isCalendarUrl(url)) return "Calendar";
   if (isSearchUrl(url)) {
     const q = getSearchQuery(url);
+    const isImages = url.includes("tab=images");
+    if (isImages) {
+      return q ? `${q} - Alma Image Search` : "Image Search";
+    }
     return q ? `${q} - Alma Search` : "Search";
   }
   if (/google\.[^/]*\/search/i.test(url)) return "Search";
@@ -829,7 +833,8 @@ function syncInternalView(url: string) {
     searchView.style.display = isSearch ? "flex" : "none";
     if (isSearch) {
       const q = getSearchQuery(url);
-      searchApp.onShow(q);
+      const isImages = url.includes("tab=images");
+      searchApp.onShow(q, isImages ? "images" : "all");
     }
   }
 }
@@ -867,7 +872,7 @@ function tabCanGoBack(tab: Tab | null): boolean {
     if (nativeAppIsEditing(tab.url)) return true;
     return tab.internalStack.length > 1;
   }
-  if ((tab.externalNavCount ?? 0) > 1) return true;
+  if ((tab.externalNavCount ?? 0) > 0) return true;
   if (tab.internalStack.length > 0) return true;
   try {
     return typeof tab.webview?.canGoBack === "function" ? !!tab.webview.canGoBack() : false;
@@ -905,10 +910,10 @@ function attachWebviewEvents(tab: Tab) {
     } else if (url === "about:blank") {
       // If webview loaded about:blank, do not clobber internal view URL
       if (!canonicalInternalUrl(tab.url)) {
-        tab.url = HOME_URL;
+        const lastInternal = tab.internalStack.length > 0 ? tab.internalStack[tab.internalStack.length - 1] : HOME_URL;
+        tab.url = lastInternal;
         tab.title = friendlyTabTitle(tab.url);
         tab.pageTitle = "";
-        recordHistory(tab.url, tab.title);
         persistTabs();
       }
     } else {
@@ -919,7 +924,7 @@ function attachWebviewEvents(tab: Tab) {
       tab.title = friendlyTabTitle(tab.url);
       tab.pageTitle = "";
       if (prevUrl && !canonicalInternalUrl(prevUrl) && prevUrl !== url) {
-        tab.externalNavCount = (tab.externalNavCount ?? 1) + 1;
+        tab.externalNavCount = (tab.externalNavCount ?? 0) + 1;
       }
       recordHistory(tab.url, tab.title);
       persistTabs();
@@ -1326,11 +1331,17 @@ const HISTORY_ICON_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx
 const SHEETS_ICON_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 10h18M9 10v10M15 10v10"></path></svg>`;
 const PRESENTATIONS_ICON_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"></rect><path d="M12 16v4M8 20h8"></path></svg>`;
 
-/** Native apps get their own glyph in the history list. */
+const SEARCH_HISTORY_ICON_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>`;
+const IMAGE_SEARCH_HISTORY_ICON_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>`;
+
+/** Native apps and search get their own glyph in the history list. */
 function historyEntryIcon(url: string): string {
   if (isDocumentsUrl(url)) return DOC_ICON_SVG;
   if (isSheetsUrl(url)) return SHEETS_ICON_SVG;
   if (isPresentationsUrl(url)) return PRESENTATIONS_ICON_SVG;
+  if (isSearchUrl(url)) {
+    return url.includes("tab=images") ? IMAGE_SEARCH_HISTORY_ICON_SVG : SEARCH_HISTORY_ICON_SVG;
+  }
   return HISTORY_ICON_SVG;
 }
 
@@ -5400,6 +5411,7 @@ function navigateTab(tab: Tab, target: string, opts?: { pushHistory?: boolean })
       // webview.src may throw if webview not attached
     }
     if (isNativeAppUrl(internal)) recordNativeAppVisit(internal);
+    if (isSearchUrl(internal)) recordHistory(internal, friendlyTabTitle(internal));
     if (tab.id === activeTabId) {
       syncInternalView(internal);
       addressInput.value = isSearchUrl(internal) ? (getSearchQuery(internal) || internal) : internal;
@@ -5414,7 +5426,7 @@ function navigateTab(tab: Tab, target: string, opts?: { pushHistory?: boolean })
   tab.title = friendlyTabTitle(target);
   tab.pageTitle = "";
   // Preserve internalStack so hitting Back from an external page returns to search/home/internal view
-  tab.externalNavCount = 1;
+  tab.externalNavCount = 0;
   tab.internalForward = [];
   if (tab.id === activeTabId) {
     syncInternalView(target);
@@ -5458,8 +5470,8 @@ backBtn.addEventListener("click", () => {
     // External web page navigation
     if (!internal) {
       // 1. If webview has deeper history within the website, go back in webview
-      if ((tab.externalNavCount ?? 1) > 1 && typeof tab.webview?.canGoBack === "function" && tab.webview.canGoBack()) {
-        tab.externalNavCount = (tab.externalNavCount ?? 1) - 1;
+      if ((tab.externalNavCount ?? 0) > 0 && typeof tab.webview?.canGoBack === "function" && tab.webview.canGoBack()) {
+        tab.externalNavCount = (tab.externalNavCount ?? 0) - 1;
         if (homeView && homeView.style.display !== "none") homeView.style.display = "none";
         tab.webview.goBack();
         return;
@@ -6739,6 +6751,21 @@ aiApp = initAiPanel({
 searchApp.init({
   onNavigate: (target: string) => navigateTo(target),
   onNewTab: (target: string) => createTab(target, true),
+  onSearchStateChange: (url: string, title: string) => {
+    const tab = getActiveTab();
+    if (!tab) return;
+    tab.url = url;
+    tab.title = title;
+    tab.pageTitle = "";
+    const stack = tab.internalStack;
+    if (stack[stack.length - 1] !== url) {
+      stack.push(url);
+    }
+    tab.internalForward = [];
+    recordHistory(url, title);
+    updateTabUI(tab);
+    syncNavState();
+  },
 });
 
 // Apply locale on load

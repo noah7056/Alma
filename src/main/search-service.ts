@@ -22,6 +22,7 @@ export interface SearchResponse {
   images?: SearchImage[];
   responseTime?: number;
   totalResults?: number;
+  provider?: string;
   error?: string;
 }
 
@@ -179,6 +180,47 @@ function diversifyResults(results: SearchResult[], maxPerDomain = 2): SearchResu
   return [...primaryList, ...secondaryList];
 }
 
+const AUTHORITATIVE_DOMAINS = new Set([
+  // Reference & Knowledge
+  "wikipedia.org", "wikimedia.org", "britannica.com", "investopedia.com", "merriam-webster.com", "dictionary.com",
+  // Developer & Open Source
+  "github.com", "gitlab.com", "stackoverflow.com", "developer.mozilla.org", "w3schools.com", "arxiv.org", "npmjs.com", "pypi.org",
+  // Major Platforms & Companies
+  "youtube.com", "reddit.com", "apple.com", "microsoft.com", "google.com", "amazon.com", "linkedin.com", "x.com", "twitter.com",
+  // Trusted News & Media
+  "reuters.com", "apnews.com", "bbc.com", "bbc.co.uk", "theverge.com", "wired.com", "techcrunch.com", "bloomberg.com", 
+  "nytimes.com", "wsj.com", "theguardian.com", "forbes.com", "nature.com", "scientificamerican.com", "nationalgeographic.com",
+  // Entertainment & Culture
+  "imdb.com", "rottentomatoes.com", "spotify.com", "netflix.com", "goodreads.com", "ign.com", "gamespot.com"
+]);
+
+const SPAM_TLDS = new Set([
+  "xyz", "top", "buzz", "click", "link", "live", "fit", "work", "loan", "tk", "ml", "ga", "cf", "gq", "bid", "racing", "download"
+]);
+
+const JUNK_PAGE_PATTERNS = [
+  /\benable javascript\b/i,
+  /\bturn on javascript\b/i,
+  /\bjavascript is disabled\b/i,
+  /\bcookies to continue\b/i,
+  /\baccess denied\b/i,
+  /\b403 forbidden\b/i,
+  /\b404 not found\b/i,
+  /\bpage not found\b/i,
+  /\bjust a moment\.\.\./i,
+  /\bchecking your browser\b/i,
+  /\bsecurity check\b/i,
+  /\brobot check\b/i,
+  /\battention required\b/i
+];
+
+function isWordIn(text: string, word: string): boolean {
+  if (!text || !word) return false;
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`, "i");
+  return re.test(text);
+}
+
 function rankResults(query: string, rawResults: SearchResult[], limit = 40): SearchResult[] {
   const qClean = query.trim().toLowerCase();
   const qWords = qClean.split(/\s+/).filter(Boolean);
@@ -207,37 +249,84 @@ function rankResults(query: string, rawResults: SearchResult[], limit = 40): Sea
     try {
       const u = new URL(r.url);
       const host = u.hostname.replace(/^(www|m)\./i, "").toLowerCase();
-      const domainName = host.split(".")[0];
+      const hostParts = host.split(".");
+      const domainName = hostParts[0];
+      const domainKey = getDomainKey(r.url);
+      const tld = hostParts[hostParts.length - 1];
       const isRoot = u.pathname === "/" || u.pathname === "" || u.pathname === "/index.html";
       const titleLower = (r.title || "").toLowerCase();
+      const contentLower = (r.content || "").toLowerCase();
+      const fullText = `${titleLower} ${contentLower}`;
 
-      // Navigational domain match (e.g. query "youtube" matching youtube.com)
+      // 1. Authoritative Domain & Trust Boost (emulating Google's PageRank/TrustRank)
+      if (AUTHORITATIVE_DOMAINS.has(host) || AUTHORITATIVE_DOMAINS.has(domainKey)) {
+        boost += 25;
+      }
+      if (tld === "edu" || tld === "gov" || host.endsWith(".edu") || host.endsWith(".gov")) {
+        boost += 30;
+      }
+
+      // 2. Junk / Spam TLD Demotion
+      if (SPAM_TLDS.has(tld)) {
+        boost -= 40;
+      }
+
+      // 3. Broken / Dead page filtering
+      const isJunkPage = JUNK_PAGE_PATTERNS.some((pat) => pat.test(fullText));
+      if (isJunkPage) {
+        boost -= 80;
+      }
+
+      // 4. Navigational Domain Match (Whole-Word, not accidental substring)
       if (host === qClean || domainName === qClean) {
-        boost += isRoot ? 120 : 60;
-      } else if (host.includes(qClean)) {
-        boost += isRoot ? 40 : 20;
+        boost += isRoot ? 130 : 70;
+      } else if (isWordIn(host, qClean)) {
+        boost += isRoot ? 45 : 25;
       }
 
-      // Title exact / prefix match
+      // 5. Title Relevance
       if (titleLower === qClean) {
-        boost += 40;
-      } else if (titleLower.startsWith(qClean)) {
+        boost += 50;
+      } else if (titleLower.startsWith(qClean + " ") || titleLower.startsWith(qClean + " -") || titleLower.startsWith(qClean + ":")) {
+        boost += 35;
+      } else if (isWordIn(titleLower, qClean)) {
         boost += 20;
-      } else if (titleLower.includes(qClean)) {
-        boost += 10;
       }
 
-      // Term coverage
-      const allWordsInTitle = qWords.every((w) => titleLower.includes(w));
-      if (allWordsInTitle) boost += 15;
+      // 6. Content / Snippet Relevance
+      if (isWordIn(contentLower, qClean)) {
+        boost += 15;
+      }
 
-      const allWordsInHost = qWords.every((w) => host.includes(w));
-      if (allWordsInHost) boost += 20;
+      // 7. Multi-word Queries: Term Coverage Ratio (Reward pages containing all terms, not just one)
+      if (qWords.length > 1) {
+        let titleTermMatches = 0;
+        let contentTermMatches = 0;
+        for (const w of qWords) {
+          if (isWordIn(titleLower, w)) titleTermMatches++;
+          if (isWordIn(contentLower, w)) contentTermMatches++;
+        }
+        const titleRatio = titleTermMatches / qWords.length;
+        const contentRatio = contentTermMatches / qWords.length;
+        boost += Math.round(titleRatio * 30 + contentRatio * 20);
 
-      // Root homepage preference
-      if (isRoot) boost += 10;
+        // Big bonus when all terms appear in the title
+        if (titleTermMatches === qWords.length) {
+          boost += 25;
+        }
+      }
 
-      // Demote third-party "what is X" explainer articles when querying an exact entity
+      // 8. URL Structure Cleanliness
+      if (isRoot) {
+        boost += 15;
+      } else if (u.pathname.split("/").filter(Boolean).length <= 2 && !u.search) {
+        boost += 8;
+      } else if (u.search && u.search.length > 50) {
+        // Demote messy tracking parameters
+        boost -= 15;
+      }
+
+      // 9. Demote third-party "what is X" explainer articles when querying an exact entity
       if (isSingleWord && (titleLower.startsWith("what is ") || titleLower.includes("what is "))) {
         if (!host.includes(qClean)) {
           boost -= 25;
@@ -298,23 +387,84 @@ function rankResults(query: string, rawResults: SearchResult[], limit = 40): Sea
 }
 
 /**
- * Search service to handle web search requests via Tavily API.
- * This runs in the main process to keep the API key secure.
+ * Fetch a factual entity summary from Wikipedia REST API as a free fallback overview.
+ */
+async function fetchWikipediaSummary(query: string): Promise<string | null> {
+  const trimmed = query.trim().replace(/^what is |^who is |^where is |^define /i, "").trim();
+  if (!trimmed || trimmed.length < 2) return null;
+  try {
+    const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(trimmed)}`, {
+      headers: { "User-Agent": "AlmaBrowser/1.0 (https://github.com/noah7056/Alma)" },
+      signal: AbortSignal.timeout(2500),
+    });
+    if (!res.ok) return null;
+    const data: any = await res.json();
+    if (data.type === "standard" && typeof data.extract === "string" && data.extract.length > 40) {
+      return data.extract;
+    }
+  } catch {}
+  return null;
+}
+
+/**
+ * Fetch high-resolution images from DuckDuckGo without any API key or credit card.
+ * Returns up to 100 images per request with direct URLs, titles, and source page links.
+ */
+async function fetchDuckDuckGoImages(query: string, page = 1): Promise<SearchImage[]> {
+  try {
+    const res1 = await fetch(`https://duckduckgo.com/?q=${encodeURIComponent(query)}&t=h_&ia=images&iax=images`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      },
+      signal: AbortSignal.timeout(3500)
+    });
+    if (!res1.ok) return [];
+    const html = await res1.text();
+    const vqdMatch = html.match(/vqd=([0-9-]+)/) || html.match(/vqd=["\x27]([0-9-]+)["\x27]/);
+    if (!vqdMatch) return [];
+    const vqd = vqdMatch[1];
+    const offset = Math.max(0, (page - 1) * 100);
+    const offsetParam = offset > 0 ? `&s=${offset}` : "";
+    const res2 = await fetch(`https://duckduckgo.com/i.js?l=us-en&o=json&q=${encodeURIComponent(query)}&vqd=${vqd}&f=,,,${offsetParam}`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "Referer": "https://duckduckgo.com/"
+      },
+      signal: AbortSignal.timeout(3500)
+    });
+    if (!res2.ok) return [];
+    const data: any = await res2.json();
+    if (!Array.isArray(data.results)) return [];
+    return data.results
+      .filter((r: any) => typeof r.image === "string" && r.image.startsWith("http"))
+      .map((r: any) => ({
+        url: r.image,
+        title: r.title || "Image",
+        description: r.url || ""
+      }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Multi-provider search service for Alma Browser.
+ * Supports:
+ * 1. Brave Search API (Recommended for 50+ rich images and comprehensive web search)
+ * 2. Tavily API (Alternative / AI-focused web search)
+ * Runs in the main process to keep API keys secure.
  */
 export class SearchService {
-  private getApiKey(): string | null {
+  private getBraveApiKey(): string | null {
+    return process.env.BRAVE_SEARCH_API_KEY?.trim() || process.env.BRAVE_API_KEY?.trim() || null;
+  }
+
+  private getTavilyApiKey(): string | null {
     return process.env.TAVILY_API_KEY?.trim() || null;
   }
 
   async search(query: string, limit = 40): Promise<SearchResponse> {
-    const apiKey = this.getApiKey();
-    if (!apiKey) {
-      return {
-        success: false,
-        error: "Tavily API key is missing. Please set TAVILY_API_KEY in your .env file."
-      };
-    }
-
     const trimmed = query.trim();
     if (!trimmed) {
       return {
@@ -325,11 +475,119 @@ export class SearchService {
       };
     }
 
+    const braveKey = this.getBraveApiKey();
+    if (braveKey) {
+      return this.searchWithBrave(trimmed, limit, braveKey);
+    }
+
+    const tavilyKey = this.getTavilyApiKey();
+    if (tavilyKey) {
+      return this.searchWithTavily(trimmed, limit, tavilyKey);
+    }
+
+    return {
+      success: false,
+      error: "Search API key is missing. Please set BRAVE_API_KEY (recommended for 50+ images) or TAVILY_API_KEY in your .env file."
+    };
+  }
+
+  /**
+   * Search using Brave Search API (Web + Images).
+   * Generous official free tier with 2,000 queries/month, 50+ high-res images, and unblocked results.
+   */
+  private async searchWithBrave(trimmed: string, limit: number, apiKey: string): Promise<SearchResponse> {
+    const startTime = Date.now();
+    try {
+      const count = Math.min(Math.max(limit, 20), 40);
+      const webUrl = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(trimmed)}&count=${count}&result_filter=web,infobox`;
+      const imgUrl = `https://api.search.brave.com/res/v1/images/search?q=${encodeURIComponent(trimmed)}&count=50`;
+
+      const webPromise = fetch(webUrl, {
+        headers: {
+          "Accept": "application/json",
+          "X-Subscription-Token": apiKey,
+        },
+      }).then((r) => r.json());
+
+      const imgPromise = fetch(imgUrl, {
+        headers: {
+          "Accept": "application/json",
+          "X-Subscription-Token": apiKey,
+        },
+      }).then((r) => r.json()).catch(() => ({ results: [] }));
+
+      const wikiPromise = fetchWikipediaSummary(trimmed);
+
+      const [webData, imgData, wikiSummary] = await Promise.all([webPromise, imgPromise, wikiPromise]);
+
+      if (webData.error || webData.message) {
+        return {
+          success: false,
+          error: webData.message || webData.error || "Brave Search request failed."
+        };
+      }
+
+      const rawResults: SearchResult[] = Array.isArray(webData.web?.results)
+        ? webData.web.results.map((r: any, idx: number) => ({
+            title: r.title || r.url || "Untitled",
+            url: r.url || "",
+            content: r.description || "",
+            score: Math.max(0.1, 1.0 - idx * 0.03),
+          }))
+        : [];
+
+      const results = rankResults(trimmed, rawResults, limit);
+
+      // Collect images from Brave
+      const images: SearchImage[] = [];
+      const imagesMap = new Map<string, SearchImage>();
+      if (Array.isArray(imgData.results)) {
+        for (const item of imgData.results) {
+          const imgUrl = item.properties?.url || item.thumbnail?.src;
+          if (typeof imgUrl === "string" && imgUrl.startsWith("http") && !imagesMap.has(imgUrl)) {
+            const entry: SearchImage = {
+              url: imgUrl,
+              title: item.title || "Image",
+              description: item.url || item.source || "",
+            };
+            imagesMap.set(imgUrl, entry);
+            images.push(entry);
+          }
+        }
+      }
+
+      // Answer / Overview: prefer infobox or fallback to Wikipedia summary
+      const infobox = webData.infobox?.results?.[0];
+      const answer = infobox?.description || infobox?.long_desc || webData.infobox?.description || wikiSummary || undefined;
+      const responseTime = (Date.now() - startTime) / 1000;
+
+      return {
+        success: true,
+        query: trimmed,
+        results,
+        totalResults: results.length,
+        answer,
+        images,
+        responseTime,
+        provider: "Brave Search",
+      };
+    } catch (e: any) {
+      console.error("[SearchService] Brave Search Error:", e);
+      return {
+        success: false,
+        error: e.message || "An error occurred while connecting to Brave Search."
+      };
+    }
+  }
+
+  /**
+   * Search using Tavily API.
+   */
+  private async searchWithTavily(trimmed: string, limit: number, apiKey: string): Promise<SearchResponse> {
     const isTavilySearch = trimmed.toLowerCase().includes("tavily");
     const excludeDomains = isTavilySearch ? ["web.archive.org"] : ["web.archive.org", "tavily.com"];
 
     try {
-      // Run the main web search and an initial image boost request in parallel
       const mainPromise = fetch("https://api.tavily.com/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -358,7 +616,15 @@ export class SearchService {
         }),
       }).then((r) => r.json()).catch(() => ({ images: [] }));
 
-      const [mainData, imageBoostData] = await Promise.all([mainPromise, imageBoostPromise]);
+      const wikiPromise = fetchWikipediaSummary(trimmed);
+      const ddgImagesPromise = fetchDuckDuckGoImages(trimmed, 1);
+
+      const [mainData, imageBoostData, wikiSummary, ddgImages] = await Promise.all([
+        mainPromise,
+        imageBoostPromise,
+        wikiPromise,
+        ddgImagesPromise,
+      ]);
 
       if (mainData.error || mainData.detail) {
         const errorMsg = mainData.detail?.error || mainData.message || mainData.error || "Tavily search request failed.";
@@ -374,43 +640,49 @@ export class SearchService {
           }))
         : [];
 
-      // Rank by relevance and clean snippets
       const results = rankResults(trimmed, rawResults, limit);
 
-      // Collect and deduplicate images
-      const imagesMap = new Map<string, SearchImage>();
-      const rawImages = [
-        ...(Array.isArray(mainData.images) ? mainData.images : []),
-        ...(Array.isArray(imageBoostData.images) ? imageBoostData.images : []),
-      ];
+      // Prefer DuckDuckGo images (provides 100+ high-res images without API limits or credit cards)
+      let images: SearchImage[] = [];
+      if (ddgImages.length > 0) {
+        images = ddgImages;
+      } else {
+        const imagesMap = new Map<string, SearchImage>();
+        const rawImages = [
+          ...(Array.isArray(mainData.images) ? mainData.images : []),
+          ...(Array.isArray(imageBoostData.images) ? imageBoostData.images : []),
+        ];
 
-      for (const img of rawImages) {
-        const url = typeof img === "string" ? img : img?.url;
-        if (typeof url === "string" && url.startsWith("http") && !imagesMap.has(url)) {
-          // Exclude Tavily icons/placeholders
-          if (!isTavilySearch && url.includes("tavily.com")) continue;
+        for (const img of rawImages) {
+          const url = typeof img === "string" ? img : img?.url;
+          if (typeof url === "string" && url.startsWith("http") && !imagesMap.has(url)) {
+            if (!isTavilySearch && url.includes("tavily.com")) continue;
 
-          imagesMap.set(url, {
-            url,
-            title: typeof img === "object" && typeof img.title === "string" ? img.title : undefined,
-            description: typeof img === "object" && typeof img.description === "string" ? img.description : undefined,
-          });
+            imagesMap.set(url, {
+              url,
+              title: typeof img === "object" && typeof img.title === "string" ? img.title : undefined,
+              description: typeof img === "object" && typeof img.description === "string" ? img.description : undefined,
+            });
+          }
         }
+        images = Array.from(imagesMap.values());
       }
-
-      const images = Array.from(imagesMap.values());
+      const answer = typeof mainData.answer === "string" && mainData.answer.trim().length > 0
+        ? mainData.answer
+        : (wikiSummary || undefined);
 
       return {
         success: true,
         query: trimmed,
         results,
         totalResults: results.length,
-        answer: typeof mainData.answer === "string" ? mainData.answer : undefined,
+        answer,
         images,
         responseTime: typeof mainData.response_time === "number" ? mainData.response_time : undefined,
+        provider: "Tavily",
       };
     } catch (e: any) {
-      console.error("[SearchService] API Error:", e);
+      console.error("[SearchService] Tavily Error:", e);
       return {
         success: false,
         error: e.message || "An error occurred while connecting to the search service."
@@ -419,55 +691,97 @@ export class SearchService {
   }
 
   async searchMoreImages(query: string, page = 1): Promise<{ success: boolean; images: SearchImage[]; error?: string }> {
-    const apiKey = this.getApiKey();
-    if (!apiKey) return { success: false, images: [], error: "Missing API key" };
-
     const trimmed = query.trim();
     if (!trimmed) return { success: true, images: [] };
 
-    const suffixes = ["photos wallpaper", "pictures gallery", "high resolution", "visuals photography", "editorial photos"];
-    const suffix = suffixes[(page - 1) % suffixes.length] || "pictures";
-    const isTavilySearch = trimmed.toLowerCase().includes("tavily");
-    const excludeDomains = isTavilySearch ? ["web.archive.org"] : ["web.archive.org", "tavily.com"];
+    // Try DuckDuckGo first for images (100 free images per page with 0 API keys and 0 credit cards)
+    const ddgMore = await fetchDuckDuckGoImages(trimmed, page);
+    if (ddgMore.length > 0) {
+      return { success: true, images: ddgMore };
+    }
 
-    try {
-      const response = await fetch("https://api.tavily.com/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          api_key: apiKey,
-          query: `${trimmed} ${suffix}`,
-          include_images: true,
-          include_image_descriptions: true,
-          exclude_domains: excludeDomains,
-          max_results: 8,
-        }),
-      });
-
-      if (!response.ok) {
-        return { success: false, images: [], error: `Tavily HTTP error ${response.status}` };
-      }
-
-      const data: any = await response.json();
-      const images: SearchImage[] = [];
-      if (Array.isArray(data.images)) {
-        for (const img of data.images) {
-          const url = typeof img === "string" ? img : img?.url;
-          if (typeof url === "string" && url.startsWith("http")) {
-            if (!isTavilySearch && url.includes("tavily.com")) continue;
-            images.push({
-              url,
-              title: typeof img === "object" && typeof img.title === "string" ? img.title : undefined,
-              description: typeof img === "object" && typeof img.description === "string" ? img.description : undefined,
-            });
+    const braveKey = this.getBraveApiKey();
+    if (braveKey) {
+      try {
+        const offset = Math.max(0, (page - 1) * 50);
+        const url = `https://api.search.brave.com/res/v1/images/search?q=${encodeURIComponent(trimmed)}&count=50&offset=${offset}`;
+        const res = await fetch(url, {
+          headers: {
+            "Accept": "application/json",
+            "X-Subscription-Token": braveKey,
+          },
+        });
+        if (!res.ok) {
+          return { success: false, images: [], error: `Brave Search HTTP error ${res.status}` };
+        }
+        const data: any = await res.json();
+        const images: SearchImage[] = [];
+        if (Array.isArray(data.results)) {
+          for (const item of data.results) {
+            const imgUrl = item.properties?.url || item.thumbnail?.src;
+            if (typeof imgUrl === "string" && imgUrl.startsWith("http")) {
+              images.push({
+                url: imgUrl,
+                title: item.title || "Image",
+                description: item.url || item.source || "",
+              });
+            }
           }
         }
+        return { success: true, images };
+      } catch (e: any) {
+        return { success: false, images: [], error: e.message || "Failed to fetch more images from Brave" };
       }
-
-      return { success: true, images };
-    } catch (e: any) {
-      return { success: false, images: [], error: e.message || "Failed to fetch more images" };
     }
+
+    const tavilyKey = this.getTavilyApiKey();
+    if (tavilyKey) {
+      const suffixes = ["photos wallpaper", "pictures gallery", "high resolution", "visuals photography", "editorial photos"];
+      const suffix = suffixes[(page - 1) % suffixes.length] || "pictures";
+      const isTavilySearch = trimmed.toLowerCase().includes("tavily");
+      const excludeDomains = isTavilySearch ? ["web.archive.org"] : ["web.archive.org", "tavily.com"];
+
+      try {
+        const response = await fetch("https://api.tavily.com/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            api_key: tavilyKey,
+            query: `${trimmed} ${suffix}`,
+            include_images: true,
+            include_image_descriptions: true,
+            exclude_domains: excludeDomains,
+            max_results: 8,
+          }),
+        });
+
+        if (!response.ok) {
+          return { success: false, images: [], error: `Tavily HTTP error ${response.status}` };
+        }
+
+        const data: any = await response.json();
+        const images: SearchImage[] = [];
+        if (Array.isArray(data.images)) {
+          for (const img of data.images) {
+            const url = typeof img === "string" ? img : img?.url;
+            if (typeof url === "string" && url.startsWith("http")) {
+              if (!isTavilySearch && url.includes("tavily.com")) continue;
+              images.push({
+                url,
+                title: typeof img === "object" && typeof img.title === "string" ? img.title : undefined,
+                description: typeof img === "object" && typeof img.description === "string" ? img.description : undefined,
+              });
+            }
+          }
+        }
+
+        return { success: true, images };
+      } catch (e: any) {
+        return { success: false, images: [], error: e.message || "Failed to fetch more images" };
+      }
+    }
+
+    return { success: false, images: [], error: "Missing API key" };
   }
 }
 

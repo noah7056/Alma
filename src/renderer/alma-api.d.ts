@@ -49,6 +49,7 @@ declare global {
     images?: AlmaSearchImage[];
     responseTime?: number;
     totalResults?: number;
+    provider?: string;
     error?: string;
   }
 

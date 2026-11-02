@@ -19,6 +19,7 @@
       <button id="new-tab" class="new-tab" aria-label="New tab">+</button>
     </div>
     <button id="split-view" class="new-tab" aria-label="Split view"><img class="nav-icon" src="assets/icons/split.svg" alt="Split" /></button>
+    <button id="ai-btn" class="new-tab" aria-label="Alma AI" title="Alma AI"><img class="nav-icon" src="assets/icons/ai.svg" alt="Alma AI" /></button>
     <button id="settings-btn" class="new-tab" aria-label="Settings"><img class="nav-icon" src="assets/icons/settings.svg" alt="Settings" /></button>
   </div>
 
@@ -95,7 +96,6 @@
             </div>
             <div class="search-bar-wrap">
               <div class="search-input-box">
-                <img src="assets/icons/search.svg" alt="" class="search-input-icon" />
                 <input
                   type="text"
                   id="search-input"
@@ -149,7 +149,7 @@
                 <img src="assets/icons/ai.svg" alt="" class="search-ai-icon" />
                 <span class="search-ai-title">AI Overview</span>
               </div>
-              <span class="search-ai-provider">Powered by Tavily</span>
+              <span class="search-ai-provider" id="search-ai-provider">AI Overview</span>
             </div>
             <div class="search-ai-body" id="search-ai-body"></div>
           </div>
@@ -171,11 +171,8 @@
           <!-- Web Results List -->
           <div class="search-results-list" id="search-results-list"></div>
 
-          <!-- Web Results Pagination & See More -->
+          <!-- Web Results Pagination -->
           <div class="search-pagination" id="search-pagination" style="display:none;">
-            <button class="search-see-more-btn" id="search-see-more-btn">
-              <span>See more results</span>
-            </button>
             <div class="search-page-numbers" id="search-page-numbers"></div>
           </div>
 
@@ -785,6 +782,101 @@
         <button class="lang-option themes-mode" data-lang="it"     style="text-align:left;padding:0 14px;">Italiano</button>
         <button class="lang-option themes-mode" data-lang="zh"     style="text-align:left;padding:0 14px;">中文</button>
       </div>
+    </div>
+  </div>
+  <div id="ai-panel" class="ai-panel themes-panel" style="display:none;">
+    <div class="ai-header">
+      <div class="ai-brand">
+        <div class="ai-mark">
+          <img src="assets/icons/ai.svg" alt="" />
+        </div>
+        <div class="ai-heading">
+          <span class="themes-title">Alma AI</span>
+          <button id="ai-status" class="ai-status" data-state="checking" aria-label="Status">
+            <span class="ai-status-dot"></span>
+            <span id="ai-status-text">Checking…</span>
+          </button>
+        </div>
+      </div>
+      <div class="ai-header-actions">
+        <button id="ai-clear" class="ai-icon-btn" aria-label="New chat" title="New chat">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+        <button id="close-ai" class="themes-close" aria-label="Close">&#10005;</button>
+      </div>
+    </div>
+    <div id="ai-context" class="ai-context">
+      <button id="ai-context-toggle" class="ai-context-bar" aria-expanded="false" aria-controls="ai-context-details" aria-label="Context details">
+        <div class="ai-context-chips">
+          <span id="ai-chip-page" class="ai-chip ai-chip-page">
+            <svg class="ai-chip-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20M12 2a14.5 14.5 0 0 1 0 20M2 12h20"/></svg>
+            <span id="ai-chip-page-label" class="ai-chip-label">Reading…</span>
+          </span>
+          <span id="ai-chip-tabs" class="ai-chip ai-chip-tabs">1 tab</span>
+          <span id="ai-chip-app" class="ai-chip ai-chip-app">Light · EN</span>
+        </div>
+        <svg class="ai-context-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div id="ai-context-details" class="ai-context-details" hidden>
+        <div class="ai-context-row">
+          <span id="ai-key-page" class="ai-context-key">Page</span>
+          <span id="ai-context-page" class="ai-context-value">Reading…</span>
+        </div>
+        <div id="ai-context-selection-row" class="ai-context-row" hidden>
+          <span id="ai-key-selection" class="ai-context-key">Selection</span>
+          <span id="ai-context-selection" class="ai-context-value"></span>
+        </div>
+        <div class="ai-context-row">
+          <span id="ai-key-tabs" class="ai-context-key">Tabs</span>
+          <span id="ai-context-tabs" class="ai-context-value"></span>
+        </div>
+        <div class="ai-context-row">
+          <span id="ai-key-app" class="ai-context-key">App</span>
+          <span id="ai-context-app" class="ai-context-value"></span>
+        </div>
+        <div class="ai-context-foot">
+          <span id="ai-context-updated">Just now</span>
+          <button id="ai-context-refresh" class="ai-text-btn">Refresh</button>
+        </div>
+      </div>
+    </div>
+    <div class="ai-conversation">
+      <div id="ai-messages" class="ai-messages">
+        <div id="ai-empty" class="ai-empty">
+          <div class="ai-empty-mark">
+            <img src="assets/icons/ai.svg" alt="" />
+          </div>
+          <div class="ai-empty-title">What can I help with?</div>
+          <div class="ai-empty-text">Ask anything about this page, your open tabs, or general questions.</div>
+          <div class="ai-suggestions">
+            <button class="ai-suggestion"></button>
+            <button class="ai-suggestion"></button>
+            <button class="ai-suggestion"></button>
+            <button class="ai-suggestion"></button>
+          </div>
+        </div>
+        <div id="ai-thread" class="ai-thread"></div>
+      </div>
+      <button id="ai-scroll-bottom" class="ai-scroll-bottom" aria-label="Scroll to bottom" hidden>
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
+      </button>
+    </div>
+    <div class="ai-composer">
+      <div class="ai-composer-box">
+        <textarea id="ai-input" class="ai-textarea" rows="1" placeholder="Ask Alma AI…"></textarea>
+        <div class="ai-composer-bar">
+          <button id="ai-context-enabled" class="ai-context-pill" aria-pressed="true" aria-label="Include context">
+            <span class="ai-context-pill-dot"></span>
+            <span id="ai-context-pill-label">Context on</span>
+          </button>
+          <div class="ai-composer-spacer"></div>
+          <span class="ai-key-hint"><span id="ai-key-hint-label">Send</span> <kbd>↵</kbd></span>
+          <button id="ai-send" class="ai-send" aria-label="Send message" disabled>
+            <svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="ai-disclaimer">Alma AI runs locally with Ollama and may make mistakes.</div>
     </div>
   </div>
   <div id="shortcut-modal" class="modal-overlay" style="display:none;">
