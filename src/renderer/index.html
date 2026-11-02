@@ -86,6 +86,138 @@
         </section>
       </div>
     </div>
+    <div id="search-view" class="home-view search-view" style="display:none;">
+      <div class="search-panel">
+        <header class="search-header">
+          <div class="search-header-top">
+            <div class="search-brand" id="search-brand" title="Back to Home">
+              <img src="assets/icons/alma.svg" alt="Alma" class="search-brand-icon" />
+            </div>
+            <div class="search-bar-wrap">
+              <div class="search-input-box">
+                <img src="assets/icons/search.svg" alt="" class="search-input-icon" />
+                <input
+                  type="text"
+                  id="search-input"
+                  class="search-input"
+                  placeholder="Search the web with Alma..."
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+                <button id="search-clear-btn" class="search-clear-btn" aria-label="Clear" style="display:none;">&times;</button>
+              </div>
+              <button id="search-submit-btn" class="search-submit-btn" aria-label="Search">
+                <img src="assets/icons/search.svg" alt="" class="search-submit-icon" />
+              </button>
+            </div>
+          </div>
+          <div class="search-tabs" id="search-tabs">
+            <button class="search-tab active" data-tab="all">All</button>
+            <button class="search-tab" data-tab="images">Images</button>
+          </div>
+        </header>
+
+        <div class="search-content" id="search-content">
+          <!-- Stats -->
+          <div class="search-stats" id="search-stats" style="display:none;"></div>
+
+          <!-- Loading state -->
+          <div class="search-loading" id="search-loading" style="display:none;">
+            <div class="search-skeleton-card search-skeleton-ai">
+              <div class="skeleton-line skeleton-title" style="width: 25%;"></div>
+              <div class="skeleton-line" style="width: 92%;"></div>
+              <div class="skeleton-line" style="width: 85%;"></div>
+              <div class="skeleton-line" style="width: 60%;"></div>
+            </div>
+            <div class="search-skeleton-card">
+              <div class="skeleton-line skeleton-site" style="width: 20%;"></div>
+              <div class="skeleton-line skeleton-title" style="width: 55%;"></div>
+              <div class="skeleton-line" style="width: 95%;"></div>
+              <div class="skeleton-line" style="width: 80%;"></div>
+            </div>
+            <div class="search-skeleton-card">
+              <div class="skeleton-line skeleton-site" style="width: 18%;"></div>
+              <div class="skeleton-line skeleton-title" style="width: 65%;"></div>
+              <div class="skeleton-line" style="width: 90%;"></div>
+            </div>
+          </div>
+
+          <!-- AI Overview Card -->
+          <div class="search-ai-card" id="search-ai-card" style="display:none;">
+            <div class="search-ai-header">
+              <div class="search-ai-badge">
+                <img src="assets/icons/ai.svg" alt="" class="search-ai-icon" />
+                <span class="search-ai-title">AI Overview</span>
+              </div>
+              <span class="search-ai-provider">Powered by Tavily</span>
+            </div>
+            <div class="search-ai-body" id="search-ai-body"></div>
+          </div>
+
+          <!-- Image Section / Carousel -->
+          <div class="search-images-section" id="search-images-section" style="display:none;">
+            <div class="search-images-header">
+              <h3 class="search-section-title">Images</h3>
+              <button class="search-see-all-images" id="search-see-all-images">See all images &rarr;</button>
+            </div>
+            <div class="search-images-grid" id="search-images-grid"></div>
+            <div class="search-images-footer" id="search-images-footer" style="display:none;">
+              <button class="search-see-more-btn" id="search-more-images-btn">
+                <span>See more images</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Web Results List -->
+          <div class="search-results-list" id="search-results-list"></div>
+
+          <!-- Web Results Pagination & See More -->
+          <div class="search-pagination" id="search-pagination" style="display:none;">
+            <button class="search-see-more-btn" id="search-see-more-btn">
+              <span>See more results</span>
+            </button>
+            <div class="search-page-numbers" id="search-page-numbers"></div>
+          </div>
+
+          <!-- Empty / Error state -->
+          <div class="search-empty-state" id="search-empty-state" style="display:none;">
+            <div class="search-empty-icon">
+              <img src="assets/icons/search.svg" alt="" />
+            </div>
+            <h2 class="search-empty-title" id="search-empty-title">What would you like to search for?</h2>
+            <p class="search-empty-desc" id="search-empty-desc">Type your search query above and press Enter to explore the web.</p>
+          </div>
+        </div>
+
+        <!-- Image Preview Lightbox -->
+        <div class="search-lightbox" id="search-lightbox" style="display:none;" role="dialog" aria-modal="true" aria-label="Image preview">
+          <div class="search-lightbox-backdrop" id="search-lightbox-backdrop"></div>
+          <div class="search-lightbox-content">
+            <button class="search-lightbox-close" id="search-lightbox-close" aria-label="Close preview">&times;</button>
+            <button class="search-lightbox-nav search-lightbox-prev" id="search-lightbox-prev" aria-label="Previous image" title="Previous image">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6" /></svg>
+            </button>
+            <button class="search-lightbox-nav search-lightbox-next" id="search-lightbox-next" aria-label="Next image" title="Next image">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6" /></svg>
+            </button>
+            <div class="search-lightbox-image-wrap">
+              <img class="search-lightbox-img" id="search-lightbox-img" alt="Preview" />
+            </div>
+            <div class="search-lightbox-details">
+              <div class="search-lightbox-meta">
+                <h4 class="search-lightbox-title" id="search-lightbox-title"></h4>
+              </div>
+              <div class="search-lightbox-actions">
+                <a class="search-lightbox-btn search-lightbox-source-btn search-lightbox-btn-primary" id="search-lightbox-source" target="_blank" rel="noopener noreferrer">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  <span id="search-lightbox-source-text">Visit link</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
     <div id="history-view" class="home-view page-view" style="display:none;">
       <div class="page-panel">
         <header class="page-header">

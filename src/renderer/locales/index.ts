@@ -12,7 +12,7 @@ export type Locale = {
   addShortcut: string; shortcutName: string; shortcutLink: string;
   cancel: string; confirm: string;
   folder: string; link: string;
-  documents: string; sheets: string; presentations: string;
+  documents: string; sheets: string; presentations: string; calendar: string;
   newDocument: string; newSheet: string; newPresentation: string;
   docsSubtitle: string; sheetsSubtitle: string; presentationsSubtitle: string;
   docsReady: string; untitledDocument: string; startWriting: string;
@@ -73,7 +73,7 @@ const en: Locale = {
   addShortcut: "Add shortcut", shortcutName: "Name", shortcutLink: "Link",
   cancel: "Cancel", confirm: "Add",
   folder: "Folder", link: "Link",
-  documents: "Documents", sheets: "Sheets", presentations: "Presentations",
+  documents: "Documents", sheets: "Sheets", presentations: "Presentations", calendar: "Calendar",
   newDocument: "+ New Document", newSheet: "+ New Spreadsheet", newPresentation: "+ New Presentation",
   docsSubtitle: "Document workspace",
   sheetsSubtitle: "Spreadsheet workspace",
@@ -162,7 +162,7 @@ const it: Locale = {
   addShortcut: "Aggiungi", shortcutName: "Nome", shortcutLink: "Link",
   cancel: "Annulla", confirm: "Aggiungi",
   folder: "Cartella", link: "Link",
-  documents: "Documents", sheets: "Sheets", presentations: "Presentations",
+  documents: "Documents", sheets: "Sheets", presentations: "Presentations", calendar: "Calendar",
   newDocument: "+ Nuovo Documento", newSheet: "+ Nuovo Foglio di Calcolo", newPresentation: "+ Nuova Presentazione",
   docsSubtitle: "Spazio documenti",
   sheetsSubtitle: "Spazio fogli di calcolo",
@@ -251,7 +251,7 @@ const zh: Locale = {
   addShortcut: "添加快捷方式", shortcutName: "名称", shortcutLink: "链接",
   cancel: "取消", confirm: "添加",
   folder: "文件夹", link: "链接",
-  documents: "Documents", sheets: "Sheets", presentations: "Presentations",
+  documents: "Documents", sheets: "Sheets", presentations: "Presentations", calendar: "Calendar",
   newDocument: "+ 新建文档", newSheet: "+ 新建电子表格", newPresentation: "+ 新建演示文稿",
   docsSubtitle: "文档工作区",
   sheetsSubtitle: "电子表格工作区",

@@ -542,3 +542,53 @@ export async function showAddressContextMenu(
   const menu = Menu.buildFromTemplate(menuTemplate);
   menu.popup({ window: win });
 }
+
+/**
+ * Show native context menu for search image results and previews
+ */
+export interface SearchImageContextMenuOptions {
+  imageUrl: string;
+  sourceUrl?: string;
+}
+
+export function showSearchImageContextMenu(
+  win: BrowserWindow,
+  options: SearchImageContextMenuOptions | string
+) {
+  const imageUrl = typeof options === "string" ? options : options?.imageUrl;
+  const sourceUrl = typeof options === "string" ? undefined : options?.sourceUrl;
+  if (!imageUrl) return;
+
+  const menuTemplate: MenuItemConstructorOptions[] = [
+    {
+      label: "Copy URL",
+      click: () => {
+        clipboard.writeText(imageUrl);
+      },
+    },
+    {
+      label: "Download",
+      click: () => {
+        win.webContents.downloadURL(imageUrl);
+      },
+    },
+    {
+      label: "Open in New Tab",
+      click: () => {
+        win.webContents.send("browser:new-tab", { url: imageUrl, makeActive: true });
+      },
+    },
+  ];
+
+  if (sourceUrl) {
+    menuTemplate.push({
+      label: "Visit Link",
+      click: () => {
+        win.webContents.send("browser:navigate-to", sourceUrl);
+      },
+    });
+  }
+
+  const menu = Menu.buildFromTemplate(menuTemplate);
+  menu.popup({ window: win });
+}

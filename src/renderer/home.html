@@ -54,7 +54,7 @@
     function go() {
       const val = input.value.trim();
       if (!val) return;
-      const url = /^https?:\/\//i.test(val) ? val : (val.includes(".") && !val.includes(" ") ? "https://" + val : "https://www.google.com/search?q=" + encodeURIComponent(val));
+      const url = /^https?:\/\//i.test(val) ? val : (val.includes(".") && !val.includes(" ") ? "https://" + val : "search.html?q=" + encodeURIComponent(val));
       window.location.href = url;
     }
 

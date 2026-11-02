@@ -54,8 +54,13 @@ interface Presentation {
 const STORAGE_KEY = "alma:presentations";
 const SLIDE_W = 1280;
 const SLIDE_H = 720;
+const SNAP = 8;
 const DEFAULT_TEXT = "#1d1d1f";
 const DEFAULT_FILL = "#4c8dff";
+
+function snap(value: number): number {
+  return Math.round(value / SNAP) * SNAP;
+}
 
 // ---- Strings ----
 
@@ -373,6 +378,10 @@ let searchQuery = "";
 let zoomMode: "fit" | number = "fit";
 let saveTimer: number | null = null;
 let uiReady = false;
+let snapEnabled = false;
+let inspectorCollapsed = false;
+let inspectorManualOpen = false;
+let inspectorAutoOpened = false;
 
 // ---- Small helpers ----
 
@@ -826,7 +835,10 @@ function renderCanvas(): void {
   if (!content || !slide) return;
   content.innerHTML = slide.elements.map(elementHtml).join("");
   const canvas = el("pres-canvas");
-  if (canvas) canvas.style.background = slide.background;
+  if (canvas) {
+    canvas.style.backgroundColor = slide.background;
+    canvas.classList.toggle("snap-grid", snapEnabled);
+  }
 }
 
 function renderSelection(): void {
@@ -1078,6 +1090,7 @@ function renderEditor(): void {
   renderInspector();
   renderToolbarState();
   renderStatus();
+  syncInspectorUI();
   applyZoom();
 }
 
@@ -1087,8 +1100,9 @@ function stageScale(): number {
   const stage = el("pres-stage");
   if (!stage) return 1;
   const rect = stage.getBoundingClientRect();
-  const available = Math.min(rect.width - 64, rect.height - 64);
-  return Math.max(0.1, available / SLIDE_W);
+  const scaleX = Math.max(0.1, (rect.width - 64) / SLIDE_W);
+  const scaleY = Math.max(0.1, (rect.height - 64) / SLIDE_H);
+  return Math.max(0.1, Math.min(scaleX, scaleY));
 }
 
 function currentScale(): number {
@@ -1150,12 +1164,14 @@ function onCanvasMouseDown(event: MouseEvent): void {
 
   const elNode = target.closest(".pres-el") as HTMLElement | null;
   if (elNode) {
-    event.preventDefault();
     const id = elNode.dataset.elId as string;
     const element = currentSlide()?.elements.find((e) => e.id === id);
     if (!element) return;
-    selectElement(id);
+    // While editing a text box, let the browser handle caret placement and
+    // text selection instead of starting a drag or stealing focus.
     if (editingElementId === id) return;
+    event.preventDefault();
+    selectElement(id);
     dragState = {
       kind: "move",
       handle: "",
@@ -1186,29 +1202,30 @@ function onDragMove(event: MouseEvent): void {
   const dx = (event.clientX - dragState.startX) / scale;
   const dy = (event.clientY - dragState.startY) / scale;
   const origin = dragState.origin;
+  const snapTo = (value: number) => (snapEnabled ? snap(value) : Math.round(value));
 
   if (dragState.kind === "move") {
-    element.x = Math.round(Math.max(-element.w + 20, Math.min(SLIDE_W - 20, origin.x + dx)));
-    element.y = Math.round(Math.max(-element.h + 20, Math.min(SLIDE_H - 20, origin.y + dy)));
+    element.x = snapTo(Math.max(0, Math.min(SLIDE_W - element.w, origin.x + dx)));
+    element.y = snapTo(Math.max(0, Math.min(SLIDE_H - element.h, origin.y + dy)));
   } else {
     const handle = dragState.handle;
     let { x, y, w, h } = origin;
-    if (handle.includes("e")) w = Math.max(40, origin.w + dx);
-    if (handle.includes("s")) h = Math.max(30, origin.h + dy);
+    if (handle.includes("e")) w = Math.max(SNAP, origin.w + dx);
+    if (handle.includes("s")) h = Math.max(SNAP, origin.h + dy);
     if (handle.includes("w")) {
-      const newW = Math.max(40, origin.w - dx);
+      const newW = Math.max(SNAP, origin.w - dx);
       x = origin.x + (origin.w - newW);
       w = newW;
     }
     if (handle.includes("n")) {
-      const newH = Math.max(30, origin.h - dy);
+      const newH = Math.max(SNAP, origin.h - dy);
       y = origin.y + (origin.h - newH);
       h = newH;
     }
-    element.x = Math.round(x);
-    element.y = Math.round(y);
-    element.w = Math.round(w);
-    element.h = Math.round(h);
+    element.x = snapTo(x);
+    element.y = snapTo(y);
+    element.w = snapTo(Math.max(SNAP, w));
+    element.h = snapTo(Math.max(SNAP, h));
   }
 
   renderCanvas();
@@ -1227,8 +1244,31 @@ function onDragEnd(): void {
   scheduleSave();
 }
 
+function syncInspectorUI(): void {
+  const inspectorEl = el("pres-inspector");
+  if (inspectorEl) inspectorEl.style.display = inspectorCollapsed ? "none" : "";
+  const btn = el("pres-inspector-toggle");
+  if (btn) {
+    btn.innerHTML = inspectorCollapsed
+      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>'
+      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>';
+    btn.setAttribute("aria-expanded", String(!inspectorCollapsed));
+  }
+}
+
 function selectElement(id: string | null): void {
+  const wasSelected = !!selectedElementId;
   selectedElementId = id;
+  if (id && inspectorCollapsed) {
+    inspectorCollapsed = false;
+    inspectorAutoOpened = true;
+    inspectorManualOpen = false;
+    syncInspectorUI();
+  } else if (!id && inspectorAutoOpened && !inspectorManualOpen) {
+    inspectorCollapsed = true;
+    inspectorAutoOpened = false;
+    syncInspectorUI();
+  }
   renderSelection();
   renderInspector();
   renderToolbarState();
@@ -1253,7 +1293,6 @@ function startTextEditing(elementId: string): void {
 
   const range = document.createRange();
   range.selectNodeContents(node);
-  range.collapse(false);
   const selection = window.getSelection();
   selection?.removeAllRanges();
   selection?.addRange(range);
@@ -2087,6 +2126,14 @@ function setupUI(): void {
     applyZoom();
   });
 
+  el("pres-snap-btn")?.addEventListener("click", () => {
+    snapEnabled = !snapEnabled;
+    const btn = el<HTMLButtonElement>("pres-snap-btn");
+    if (btn) btn.setAttribute("aria-pressed", String(snapEnabled));
+    btn?.classList.toggle("active", snapEnabled);
+    renderCanvas();
+  });
+
   const canvas = el("pres-canvas");
   canvas?.addEventListener("mousedown", onCanvasMouseDown);
   canvas?.addEventListener("dblclick", (event) => {
@@ -2096,9 +2143,35 @@ function setupUI(): void {
     if (element?.type === "text") startTextEditing(element.id);
   });
 
+  el("pres-inspector-toggle")?.addEventListener("click", () => {
+    inspectorCollapsed = !inspectorCollapsed;
+    if (!inspectorCollapsed) {
+      inspectorManualOpen = true;
+      inspectorAutoOpened = false;
+    } else {
+      inspectorManualOpen = false;
+      inspectorAutoOpened = false;
+    }
+    syncInspectorUI();
+  });
+
   window.addEventListener("resize", () => {
     if (zoomMode === "fit") applyZoom();
   });
+
+  el("pres-stage")?.addEventListener(
+    "wheel",
+    (event) => {
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+        const current = typeof zoomMode === "number" ? zoomMode : currentScale();
+        const factor = event.deltaY < 0 ? 1.1 : 0.9;
+        zoomMode = Math.min(2, Math.max(0.2, current * factor));
+        applyZoom();
+      }
+    },
+    { passive: false }
+  );
 
   window.addEventListener("beforeunload", () => {
     flushSave();
@@ -2166,6 +2239,19 @@ function onGlobalKeydown(event: KeyboardEvent): void {
   if (mod && event.key.toLowerCase() === "y") {
     event.preventDefault();
     redo();
+    return;
+  }
+
+  if (event.key === "+" || event.key === "=") {
+    event.preventDefault();
+    zoomMode = Math.min(2, (typeof zoomMode === "number" ? zoomMode : currentScale()) + 0.1);
+    applyZoom();
+    return;
+  }
+  if (event.key === "-" || event.key === "_") {
+    event.preventDefault();
+    zoomMode = Math.max(0.2, (typeof zoomMode === "number" ? zoomMode : currentScale()) - 0.1);
+    applyZoom();
     return;
   }
   if (mod && event.key.toLowerCase() === "d") {

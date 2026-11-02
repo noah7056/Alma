@@ -1,4 +1,13 @@
 import { presentationsApp } from "./presentations.js";
+import { calendarApp } from "./calendar.js";
+import { searchApp } from "./search.js";
+import {
+  initAiPanel,
+  type AiPanelActiveTab,
+  type AiPanelApp,
+  type AiPanelAppState,
+  type AiPanelTab,
+} from "./ai.js";
 
 // ---- i18n (inlined to avoid ES module resolution issues) ----
 type LangCode = "en" | "it" | "zh";
@@ -21,7 +30,7 @@ const _en = {
   addShortcut: "Add shortcut", shortcutName: "Name", shortcutLink: "Link",
   cancel: "Cancel", confirm: "Add",
   folder: "Folder", link: "Link",
-  documents: "Documents", sheets: "Sheets", presentations: "Presentations",
+  documents: "Documents", sheets: "Sheets", presentations: "Presentations", calendar: "Calendar",
   newDocument: "+ New Document", newSheet: "+ New Spreadsheet", newPresentation: "+ New Presentation",
   docsSubtitle: "Document workspace",
   sheetsSubtitle: "Spreadsheet workspace",
@@ -122,7 +131,7 @@ const _it: Locale = {
   addShortcut: "Aggiungi", shortcutName: "Nome", shortcutLink: "Link",
   cancel: "Annulla", confirm: "Aggiungi",
   folder: "Cartella", link: "Link",
-  documents: "Documents", sheets: "Sheets", presentations: "Presentations",
+  documents: "Documents", sheets: "Sheets", presentations: "Presentations", calendar: "Calendar",
   newDocument: "+ Nuovo Documento", newSheet: "+ Nuovo Foglio di Calcolo", newPresentation: "+ Nuova Presentazione",
   docsSubtitle: "Spazio documenti",
   sheetsSubtitle: "Spazio fogli di calcolo",
@@ -223,7 +232,7 @@ const _zh: Locale = {
   addShortcut: "添加快捷方式", shortcutName: "名称", shortcutLink: "链接",
   cancel: "取消", confirm: "添加",
   folder: "文件夹", link: "链接",
-  documents: "Documents", sheets: "Sheets", presentations: "Presentations",
+  documents: "Documents", sheets: "Sheets", presentations: "Presentations", calendar: "Calendar",
   newDocument: "+ 新建文档", newSheet: "+ 新建电子表格", newPresentation: "+ 新建演示文稿",
   docsSubtitle: "文档工作区",
   sheetsSubtitle: "电子表格工作区",
@@ -349,6 +358,7 @@ function applyLocale(): void {
   setTextAll(".app-item[data-app='documents'] .app-name", t.documents);
   setTextAll(".app-item[data-app='sheets'] .app-name", t.sheets);
   setTextAll(".app-item[data-app='presentations'] .app-name", t.presentations);
+  setTextAll(".app-item[data-app='calendar'] .app-name", t.calendar);
 
   // Settings panel buttons
   const elMap: [string, string][] = [
@@ -399,6 +409,10 @@ function applyLocale(): void {
   applyDocumentsLocale();
   applySheetsLocale();
   presentationsApp.setLang(currentLang);
+  calendarApp.setLang(currentLang);
+  searchApp.setLang(currentLang);
+  aiApp?.setLang(currentLang);
+  aiApp?.refreshContext();
 
   // Language panel
   setText("#language-panel .themes-title", t.languageTitle);
@@ -427,8 +441,8 @@ function applyLocale(): void {
   // Language option active highlight
   document.querySelectorAll<HTMLButtonElement>(".lang-option").forEach(btn => {
     const active = btn.dataset.lang === saved;
-    btn.style.fontWeight = active ? "700" : "500";
-    btn.style.background = active ? "color-mix(in srgb, var(--tint) 20%, var(--surface))" : "";
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-pressed", String(active));
   });
 }
 
@@ -447,6 +461,8 @@ const FAVORITES_URL = "favorites.html";
 const DOCUMENTS_URL = "documents.html";
 const SHEETS_URL = "sheets.html";
 const PRESENTATIONS_URL = "presentations.html";
+const CALENDAR_URL = "calendar.html";
+const SEARCH_URL = "search.html";
 
 const backBtn = document.getElementById("back") as HTMLButtonElement;
 const forwardBtn = document.getElementById("forward") as HTMLButtonElement;
@@ -463,6 +479,8 @@ const favoritesView = document.getElementById("favorites-view") as HTMLElement |
 const documentsView = document.getElementById("documents-view") as HTMLElement | null;
 const sheetsView = document.getElementById("sheets-view") as HTMLElement | null;
 const presentationsView = document.getElementById("presentations-view") as HTMLElement | null;
+const calendarView = document.getElementById("calendar-view") as HTMLElement | null;
+const searchView = document.getElementById("search-view") as HTMLElement | null;
 const tabsContainer = document.getElementById("tabs") as HTMLElement | null;
 const newTabBtn = document.getElementById("new-tab") as HTMLButtonElement | null;
 const splitBtn = document.getElementById("split-view") as HTMLButtonElement | null;
@@ -481,7 +499,9 @@ document.documentElement.setAttribute("data-theme", savedTheme);
 const themesPanel = document.getElementById("themes-panel");
 if (themeToggleBtn && themesPanel) {
   themeToggleBtn.addEventListener("click", () => {
-    themesPanel.style.display = themesPanel.style.display === "none" ? "flex" : "none";
+    const open = themesPanel.style.display === "none";
+    if (open) aiApp?.close();
+    themesPanel.style.display = open ? "flex" : "none";
     if (settingsPanel) settingsPanel.style.display = "none";
     const fp = document.getElementById("favorites-panel");
     if (fp) fp.style.display = "none";
@@ -502,6 +522,7 @@ const themeLightBtn = document.getElementById("theme-light");
 const themeDarkBtn = document.getElementById("theme-dark");
 function applyTheme(mode: string) {
   const prevMode = document.documentElement.getAttribute("data-theme") ?? "light";
+  window.setTimeout(() => aiApp?.refreshContext(), 0);
   const prevTint = localStorage.getItem("alma:tint") ?? defaultTintFor(prevMode);
   document.documentElement.setAttribute("data-theme", mode);
   localStorage.setItem("alma:theme", mode);
@@ -528,6 +549,7 @@ function defaultTintFor(mode: string): string {
 function applyTint(color: string) {
   document.documentElement.style.setProperty("--tint", color);
   document.documentElement.style.setProperty("--accent", color);
+  window.setTimeout(() => aiApp?.refreshContext(), 0);
 }
 
 const savedTint = localStorage.getItem("alma:tint");
@@ -611,14 +633,18 @@ if (clearBgBtn) {
 interface Tab {
   id: number;
   title: string;
+  /** Real document title, used for AI context; the strip keeps the short title. */
+  pageTitle: string;
   url: string;
   webview: any;
   element: HTMLElement;
   initialAboutBlankPending: boolean;
-  /** Internal views (home/history/favorites/documents/sheets/presentations) visited by this tab. */
+  /** Internal views (home/history/favorites/documents/sheets/presentations/search) visited by this tab. */
   internalStack: string[];
   /** Internal views popped by "back", replayed by "forward". */
   internalForward: string[];
+  /** Depth of external web navigations in webview */
+  externalNavCount?: number;
 }
 
 let tabs: Tab[] = [];
@@ -641,6 +667,8 @@ let dragHandled = false;
 let currentDragPayload: any = null;
 let dropInProgress = false;
 let droppedInTabBar = false;
+/** AI panel facade; assigned once the DOM helpers are initialised at startup. */
+let aiApp: AiPanelApp | null = null;
 
 function isHomeUrl(url: string): boolean {
   return url === HOME_URL
@@ -669,6 +697,29 @@ function isPresentationsUrl(url: string): boolean {
   return url === PRESENTATIONS_URL || /^https?:\/\/presentations\.html$/i.test(url) || url === "alma://presentations";
 }
 
+function isCalendarUrl(url: string): boolean {
+  return url === CALENDAR_URL || /^https?:\/\/calendar\.html$/i.test(url) || url === "alma://calendar";
+}
+
+function isSearchUrl(url: string): boolean {
+  if (!url) return false;
+  return url.startsWith(SEARCH_URL)
+    || url.startsWith("alma://search")
+    || /^https?:\/\/search\.html/i.test(url)
+    || /[/\\]search\.html(\?|$)/i.test(url);
+}
+
+function getSearchQuery(url: string): string {
+  try {
+    const qIndex = url.indexOf("?");
+    if (qIndex === -1) return "";
+    const params = new URLSearchParams(url.slice(qIndex));
+    return params.get("q")?.trim() || "";
+  } catch {
+    return "";
+  }
+}
+
 /** Maps any flavour of an internal URL to its canonical constant, or null for web pages. */
 function canonicalInternalUrl(url: string): string | null {
   if (isHomeUrl(url)) return HOME_URL;
@@ -677,11 +728,13 @@ function canonicalInternalUrl(url: string): string | null {
   if (isDocumentsUrl(url)) return DOCUMENTS_URL;
   if (isSheetsUrl(url)) return SHEETS_URL;
   if (isPresentationsUrl(url)) return PRESENTATIONS_URL;
+  if (isCalendarUrl(url)) return CALENDAR_URL;
+  if (isSearchUrl(url)) return url;
   return null;
 }
 
 function isNativeAppUrl(url: string): boolean {
-  return isDocumentsUrl(url) || isSheetsUrl(url) || isPresentationsUrl(url);
+  return isDocumentsUrl(url) || isSheetsUrl(url) || isPresentationsUrl(url) || isCalendarUrl(url);
 }
 
 /** History a fresh tab starts with: the home page, plus the view it was opened on. */
@@ -696,6 +749,7 @@ function nativeAppIsEditing(url: string): boolean {
   if (isDocumentsUrl(url)) return !!activeDocId;
   if (isSheetsUrl(url)) return !!activeSheetId;
   if (isPresentationsUrl(url)) return presentationsApp.isEditing();
+  if (isCalendarUrl(url)) return calendarApp.isEditing();
   return false;
 }
 
@@ -704,6 +758,7 @@ function closeNativeAppEditor(url: string): void {
   if (isDocumentsUrl(url)) closeEditorReturnToList();
   else if (isSheetsUrl(url)) closeSheetEditorReturnToList();
   else if (isPresentationsUrl(url)) presentationsApp.closeEditor();
+  else if (isCalendarUrl(url)) calendarApp.closeEditor();
 }
 
 function friendlyTabTitle(url: string): string {
@@ -713,6 +768,11 @@ function friendlyTabTitle(url: string): string {
   if (isDocumentsUrl(url)) return "Documents";
   if (isSheetsUrl(url)) return "Sheets";
   if (isPresentationsUrl(url)) return "Presentations";
+  if (isCalendarUrl(url)) return "Calendar";
+  if (isSearchUrl(url)) {
+    const q = getSearchQuery(url);
+    return q ? `${q} - Alma Search` : "Search";
+  }
   if (/google\.[^/]*\/search/i.test(url)) return "Search";
   try {
     const u = new URL(url);
@@ -730,6 +790,8 @@ function syncInternalView(url: string) {
   const isDoc = isDocumentsUrl(url);
   const isSheet = isSheetsUrl(url);
   const isPres = isPresentationsUrl(url);
+  const isCal = isCalendarUrl(url);
+  const isSearch = isSearchUrl(url);
 
   if (homeView) homeView.style.display = isHome ? "flex" : "none";
   if (historyView) {
@@ -758,6 +820,17 @@ function syncInternalView(url: string) {
   if (presentationsView) {
     presentationsView.style.display = isPres ? "flex" : "none";
     if (isPres) presentationsApp.onShow();
+  }
+  if (calendarView) {
+    calendarView.style.display = isCal ? "flex" : "none";
+    if (isCal) calendarApp.onShow();
+  }
+  if (searchView) {
+    searchView.style.display = isSearch ? "flex" : "none";
+    if (isSearch) {
+      const q = getSearchQuery(url);
+      searchApp.onShow(q);
+    }
   }
 }
 
@@ -794,6 +867,8 @@ function tabCanGoBack(tab: Tab | null): boolean {
     if (nativeAppIsEditing(tab.url)) return true;
     return tab.internalStack.length > 1;
   }
+  if ((tab.externalNavCount ?? 0) > 1) return true;
+  if (tab.internalStack.length > 0) return true;
   try {
     return typeof tab.webview?.canGoBack === "function" ? !!tab.webview.canGoBack() : false;
   } catch {
@@ -803,9 +878,7 @@ function tabCanGoBack(tab: Tab | null): boolean {
 
 function tabCanGoForward(tab: Tab | null): boolean {
   if (!tab) return false;
-  if (canonicalInternalUrl(tab.url)) {
-    return tab.internalForward.length > 0;
-  }
+  if (tab.internalForward.length > 0) return true;
   try {
     return typeof tab.webview?.canGoForward === "function" ? !!tab.webview.canGoForward() : false;
   } catch {
@@ -829,9 +902,25 @@ function attachWebviewEvents(tab: Tab) {
     const staleInitial = url === "about:blank" && tab.initialAboutBlankPending && tab.url !== HOME_URL;
     if (staleInitial) {
       // ignore stale initial about:blank navigation for external tabs
+    } else if (url === "about:blank") {
+      // If webview loaded about:blank, do not clobber internal view URL
+      if (!canonicalInternalUrl(tab.url)) {
+        tab.url = HOME_URL;
+        tab.title = friendlyTabTitle(tab.url);
+        tab.pageTitle = "";
+        recordHistory(tab.url, tab.title);
+        persistTabs();
+      }
     } else {
-      tab.url = url === "about:blank" ? HOME_URL : url;
+      // Don't let webview navigation clobber internal view state
+      if (canonicalInternalUrl(tab.url)) return;
+      const prevUrl = tab.url;
+      tab.url = url;
       tab.title = friendlyTabTitle(tab.url);
+      tab.pageTitle = "";
+      if (prevUrl && !canonicalInternalUrl(prevUrl) && prevUrl !== url) {
+        tab.externalNavCount = (tab.externalNavCount ?? 1) + 1;
+      }
       recordHistory(tab.url, tab.title);
       persistTabs();
     }
@@ -839,18 +928,20 @@ function attachWebviewEvents(tab: Tab) {
     if (tab.id === activeTabId || (splitMode && (tab.id === leftTabId || tab.id === rightTabId))) {
       if (!splitMode) {
         syncInternalView(tab.url);
-        addressInput.value = tab.url;
+        addressInput.value = isSearchUrl(tab.url) ? (getSearchQuery(tab.url) || tab.url) : tab.url;
       }
       syncNavState();
       if (splitMode) applyLayout();
     }
     updateTabUI(tab);
+    aiApp?.notifyPageChanged();
   });
   wv.addEventListener("did-navigate-in-page", (event: Event) => {
     const url = (event as unknown as { url?: string }).url ?? "";
     if (!(url === "about:blank" && tab.initialAboutBlankPending && tab.url !== HOME_URL)) {
       tab.url = url === "about:blank" ? HOME_URL : url;
       tab.title = friendlyTabTitle(tab.url);
+      tab.pageTitle = "";
     }
     tab.initialAboutBlankPending = false;
     if (tab.id === activeTabId || (splitMode && (tab.id === leftTabId || tab.id === rightTabId))) {
@@ -862,6 +953,7 @@ function attachWebviewEvents(tab: Tab) {
       if (splitMode) applyLayout();
     }
     updateTabUI(tab);
+    aiApp?.notifyPageChanged();
   });
   wv.addEventListener("did-finish-load", () => {
     if (tab.id === activeTabId || (splitMode && (tab.id === leftTabId || tab.id === rightTabId))) {
@@ -869,15 +961,21 @@ function attachWebviewEvents(tab: Tab) {
     }
     tab.title = friendlyTabTitle(tab.url);
     try {
-      // ignore page title; keep simplified site name
+      // Keep the short site name in the strip, but remember the real title for AI context.
+      const realTitle = typeof tab.webview?.getTitle === "function" ? tab.webview.getTitle() : "";
+      if (realTitle) tab.pageTitle = realTitle;
     } catch {
       // ignore
     }
     updateTabUI(tab);
+    aiApp?.notifyPageChanged();
   });
-  wv.addEventListener("page-title-updated", () => {
+  wv.addEventListener("page-title-updated", (event: Event) => {
+    const realTitle = (event as unknown as { title?: string }).title ?? "";
+    if (realTitle) tab.pageTitle = realTitle;
     tab.title = friendlyTabTitle(tab.url);
     updateTabUI(tab);
+    aiApp?.notifyPageChanged();
   });
   wv.addEventListener("did-fail-load", (event: Event) => {
     const e = event as unknown as { errorDescription?: string };
@@ -948,6 +1046,7 @@ function createTab(initialUrl: string = HOME_URL, makeActive: boolean = true): T
   const tab: Tab = {
     id,
     title: "New Tab",
+    pageTitle: "",
     url: initialUrl,
     webview: wv,
     element,
@@ -1055,6 +1154,7 @@ function createTab(initialUrl: string = HOME_URL, makeActive: boolean = true): T
       tabs.forEach((t) => updateTabUI(t));
       applyLayout();
       syncNavState();
+      aiApp?.notifyPageChanged();
       return;
     }
     switchTab(id);
@@ -1098,6 +1198,7 @@ function switchTab(id: number) {
     syncNavState();
     updateFavoriteButtons();
     applyLayout();
+    aiApp?.notifyPageChanged();
     return;
   }
   activeTabId = id;
@@ -1112,6 +1213,7 @@ function switchTab(id: number) {
   addressInput.value = tab.url;
   syncNavState();
   updateFavoriteButtons();
+  aiApp?.notifyPageChanged();
 }
 
 interface ClosedTabRecord {
@@ -1121,7 +1223,7 @@ interface ClosedTabRecord {
 const recentlyClosedTabs: ClosedTabRecord[] = [];
 
 function recordClosedTab(url: string, title: string) {
-  if (!url || isHomeUrl(url) || url === "about:blank" || isDocumentsUrl(url) || isSheetsUrl(url) || isPresentationsUrl(url)) return;
+  if (!url || isHomeUrl(url) || url === "about:blank" || isDocumentsUrl(url) || isSheetsUrl(url) || isPresentationsUrl(url) || isCalendarUrl(url)) return;
   recentlyClosedTabs.unshift({ url, title });
   if (recentlyClosedTabs.length > 30) recentlyClosedTabs.pop();
 }
@@ -1328,7 +1430,7 @@ function isFavoriteUrlSaved(url: string): boolean {
   return getFavorites().some((f) => normalizeUrl(f.url) === norm);
 }
 function addFavorite(url: string, title: string, folderId?: string) {
-  if (!url || isHomeUrl(url) || isHistoryUrl(url) || isFavoritesUrl(url) || isDocumentsUrl(url) || isSheetsUrl(url) || isPresentationsUrl(url)) return;
+  if (!url || isHomeUrl(url) || isHistoryUrl(url) || isFavoritesUrl(url) || isDocumentsUrl(url) || isSheetsUrl(url) || isPresentationsUrl(url) || isCalendarUrl(url)) return;
   const norm = normalizeUrl(url);
   const favs = getFavorites();
   if (favs.some((f) => normalizeUrl(f.url) === norm)) return;
@@ -1372,7 +1474,7 @@ function renderFavoriteRow(item: FavoriteItem, folders: FavoriteFolder[]): strin
     <div class="fav-item-row" draggable="true" data-fav-url="${encodeURIComponent(item.url)}">
       <a href="${item.url}" data-url="${item.url}" class="fav-item-link" title="${item.title}">${item.title}</a>
       ${folders.length > 0 ? `<select class="fav-move-select" data-url="${encodeURIComponent(item.url)}" title="Move to folder">${folderOptions}</select>` : ""}
-      <button data-remove="${encodeURIComponent(item.url)}" class="settings-btn" style="width:auto;padding:2px 8px;font-size:12px;">Remove</button>
+      <button data-remove="${encodeURIComponent(item.url)}" class="fav-remove-btn">Remove</button>
     </div>
   `;
 }
@@ -1387,7 +1489,7 @@ function renderFavorites() {
     if (!container) return;
 
     if (favs.length === 0 && folders.length === 0) {
-      container.innerHTML = `<div style="padding:16px 0;text-align:center;color:var(--text-secondary);font-size:13px;">Nothing yet</div>`;
+      container.innerHTML = `<div class="fav-empty">Nothing yet</div>`;
       return;
     }
 
@@ -1403,13 +1505,13 @@ function renderFavorites() {
           <div class="fav-folder-header" data-toggle-folder="${folder.id}">
             <span class="fav-folder-toggle">${isOpen ? "▼" : "▶"}</span>
             <span class="fav-folder-title">📁 ${folder.name}</span>
-            <span class="fav-folder-count">(${folderFavs.length})</span>
+            <span class="fav-folder-count">${folderFavs.length}</span>
             <button class="fav-folder-delete" data-delete-folder="${folder.id}" title="Delete folder" aria-label="Delete folder">✕</button>
           </div>
           ${isOpen ? `
             <div class="fav-folder-items">
               ${folderFavs.length === 0
-                ? `<div style="padding:8px 4px;color:var(--text-secondary);font-size:12px;font-style:italic;">Empty folder (drag links here)</div>`
+                ? `<div class="fav-empty-note">Empty folder (drag links here)</div>`
                 : folderFavs.map(f => renderFavoriteRow(f, folders)).join("")}
             </div>
           ` : ""}
@@ -1425,7 +1527,7 @@ function renderFavorites() {
           ${folders.length > 0 ? `<div class="fav-section-label">Unfiled Favorites (${unfiledFavs.length})</div>` : ""}
           <div class="fav-unfiled-items">
             ${unfiledFavs.length === 0 && folders.length > 0
-              ? `<div style="padding:6px 4px;color:var(--text-secondary);font-size:12px;font-style:italic;">Drag links here to unfile</div>`
+              ? `<div class="fav-empty-note">Drag links here to unfile</div>`
               : unfiledFavs.map(f => renderFavoriteRow(f, folders)).join("")}
           </div>
         </div>
@@ -5157,7 +5259,9 @@ const settingsPanel = document.getElementById("settings-panel");
 if (settingsBtn && settingsPanel) {
   settingsBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    settingsPanel.style.display = settingsPanel.style.display === "none" ? "block" : "none";
+    const open = settingsPanel.style.display === "none";
+    if (open) aiApp?.close();
+    settingsPanel.style.display = open ? "block" : "none";
   });
 }
 document.addEventListener("click", (e) => {
@@ -5179,7 +5283,9 @@ if (favoritesToggleBtn) {
   favoritesToggleBtn.addEventListener("click", () => {
     if (settingsPanel) settingsPanel.style.display = "none";
     const fp = document.getElementById("favorites-panel");
-    if (fp) fp.style.display = fp.style.display === "none" ? "flex" : "none";
+    const open = fp ? fp.style.display === "none" : false;
+    if (open) aiApp?.close();
+    if (fp) fp.style.display = open ? "flex" : "none";
   });
 }
 const closeFavoritesBtn = document.getElementById("close-favorites");
@@ -5221,6 +5327,7 @@ if (restoreBtn) {
     const on = localStorage.getItem("alma:restoreSession") !== "false";
     localStorage.setItem("alma:restoreSession", String(!on));
     updateRestoreBtn();
+    aiApp?.refreshContext();
   });
 }
 
@@ -5262,7 +5369,7 @@ function resolveURL(raw: string): string {
   if (trimmed.toLowerCase() === "about:blank") return HOME_URL;
   if (/^(https?|view-source):\/\//i.test(trimmed) || trimmed.startsWith("view-source:")) return trimmed;
   if (trimmed.includes(".") && !trimmed.includes(" ")) return `https://${trimmed}`;
-  return `https://www.google.com/search?q=${encodeURIComponent(trimmed)}`;
+  return `${SEARCH_URL}?q=${encodeURIComponent(trimmed)}`;
 }
 
 function navigateTab(tab: Tab, target: string, opts?: { pushHistory?: boolean }) {
@@ -5276,28 +5383,38 @@ function navigateTab(tab: Tab, target: string, opts?: { pushHistory?: boolean })
   if (internal) {
     tab.url = internal;
     tab.title = friendlyTabTitle(internal);
+    tab.pageTitle = "";
     if (pushHistory) {
       const stack = tab.internalStack;
       if (stack[stack.length - 1] !== internal) stack.push(internal);
       tab.internalForward = [];
     }
-    if (internal === HOME_URL && tab.webview.src !== "about:blank") {
-      tab.webview.src = "about:blank";
+    tab.externalNavCount = 0;
+    // Reset webview when returning to any internal view to prevent did-navigate clobbering
+    try {
+      const wvSrc = (tab.webview.src || "").toString();
+      if (wvSrc.startsWith("http")) {
+        tab.webview.src = "about:blank";
+      }
+    } catch {
+      // webview.src may throw if webview not attached
     }
     if (isNativeAppUrl(internal)) recordNativeAppVisit(internal);
     if (tab.id === activeTabId) {
       syncInternalView(internal);
-      addressInput.value = internal;
+      addressInput.value = isSearchUrl(internal) ? (getSearchQuery(internal) || internal) : internal;
       syncNavState();
     }
     if (splitMode) applyLayout();
     updateTabUI(tab);
+    aiApp?.notifyPageChanged();
     return;
   }
   tab.url = target;
   tab.title = friendlyTabTitle(target);
-  // A web page replaces the internal history: the webview can only walk back to the home page.
-  tab.internalStack = [HOME_URL];
+  tab.pageTitle = "";
+  // Preserve internalStack so hitting Back from an external page returns to search/home/internal view
+  tab.externalNavCount = 1;
   tab.internalForward = [];
   if (tab.id === activeTabId) {
     syncInternalView(target);
@@ -5307,6 +5424,7 @@ function navigateTab(tab: Tab, target: string, opts?: { pushHistory?: boolean })
   updateTabUI(tab);
   if (tab.id === activeTabId) syncNavState();
   if (splitMode) applyLayout();
+  aiApp?.notifyPageChanged();
 }
 
 function navigateTo(target: string) {
@@ -5337,6 +5455,23 @@ backBtn.addEventListener("click", () => {
       navigateTab(tab, previous, { pushHistory: false });
       return;
     }
+    // External web page navigation
+    if (!internal) {
+      // 1. If webview has deeper history within the website, go back in webview
+      if ((tab.externalNavCount ?? 1) > 1 && typeof tab.webview?.canGoBack === "function" && tab.webview.canGoBack()) {
+        tab.externalNavCount = (tab.externalNavCount ?? 1) - 1;
+        if (homeView && homeView.style.display !== "none") homeView.style.display = "none";
+        tab.webview.goBack();
+        return;
+      }
+      // 2. Otherwise return to the internal page we navigated from (e.g. search results)
+      if (tab.internalStack.length > 0) {
+        const previous = tab.internalStack[tab.internalStack.length - 1];
+        tab.internalForward.push(tab.url);
+        navigateTab(tab, previous, { pushHistory: false });
+        return;
+      }
+    }
     if (typeof tab.webview?.canGoBack === "function" && tab.webview.canGoBack() && typeof tab.webview?.goBack === "function") {
       if (homeView && homeView.style.display !== "none") homeView.style.display = "none";
       tab.webview.goBack();
@@ -5350,10 +5485,12 @@ forwardBtn.addEventListener("click", () => {
   try {
     const tab = getActiveTab();
     if (!tab) return;
-    const internal = canonicalInternalUrl(tab.url);
-    if (internal && tab.internalForward.length > 0) {
+    if (tab.internalForward.length > 0) {
       const next = tab.internalForward.pop() as string;
-      tab.internalStack.push(next);
+      const isNextInternal = !!canonicalInternalUrl(next);
+      if (isNextInternal) {
+        tab.internalStack.push(next);
+      }
       navigateTab(tab, next, { pushHistory: false });
       return;
     }
@@ -6172,12 +6309,14 @@ function createPaneToolbar(side: "left" | "right"): HTMLElement {
     focusedPane = side;
     activeTabId = side === "left" ? leftTabId : rightTabId;
     tabs.forEach((t) => updateTabUI(t));
+    aiApp?.notifyPageChanged();
   });
 
   input.addEventListener("focus", () => {
     focusedPane = side;
     activeTabId = side === "left" ? leftTabId : rightTabId;
     tabs.forEach((t) => updateTabUI(t));
+    aiApp?.notifyPageChanged();
   });
 
   input.addEventListener("contextmenu", (e) => {
@@ -6384,6 +6523,7 @@ if (webviewContainer) {
     focusedPane = x < splitRatio * rect.width ? "left" : "right";
     activeTabId = focusedPane === "left" ? leftTabId : rightTabId;
     tabs.forEach((t) => updateTabUI(t));
+    aiApp?.notifyPageChanged();
   });
 }
 
@@ -6460,6 +6600,7 @@ document.addEventListener("click", (e) => {
     if (appType === "documents") targetUrl = DOCUMENTS_URL;
     else if (appType === "sheets") targetUrl = SHEETS_URL;
     else if (appType === "presentations") targetUrl = PRESENTATIONS_URL;
+    else if (appType === "calendar") targetUrl = CALENDAR_URL;
 
     const inRightPane = !!appItem.closest("#home-view-right");
     if (splitMode && inRightPane) {
@@ -6487,6 +6628,7 @@ const closeLangBtn = document.getElementById("close-language");
 if (langSettingsBtn && langPanel) {
   langSettingsBtn.addEventListener("click", () => {
     const open = langPanel.style.display === "none";
+    if (open) aiApp?.close();
     langPanel.style.display = open ? "flex" : "none";
     if (settingsPanel) settingsPanel.style.display = "none";
     const fp = document.getElementById("favorites-panel");
@@ -6503,6 +6645,100 @@ document.querySelectorAll<HTMLButtonElement>(".lang-option").forEach(btn => {
     saveLang(btn.dataset.lang as LangSetting);
     applyLocale();
   });
+});
+
+// ---- AI panel ----
+/** Human-readable name of the internal view a tab is showing. */
+function aiViewLabel(url: string): string {
+  if (isHistoryUrl(url)) return t.historyTitle;
+  if (isFavoritesUrl(url)) return t.favoritesTitle;
+  if (isDocumentsUrl(url)) return t.documents;
+  if (isSheetsUrl(url)) return t.sheets;
+  if (isPresentationsUrl(url)) return t.presentations;
+  if (isCalendarUrl(url)) return t.calendar;
+  if (isSearchUrl(url)) {
+    const q = getSearchQuery(url);
+    return q ? `Search: ${q}` : "Search";
+  }
+  if (isHomeUrl(url)) return t.home;
+  return "";
+}
+
+function getAiTabs(): AiPanelTab[] {
+  return tabs.map((tab) => {
+    let pane: "left" | "right" | undefined;
+    if (splitMode) {
+      if (tab.id === leftTabId) pane = "left";
+      else if (tab.id === rightTabId) pane = "right";
+    }
+    const internal = canonicalInternalUrl(tab.url);
+    return {
+      title: internal
+        ? tab.title || aiViewLabel(internal)
+        : tab.pageTitle || tab.title || friendlyTabTitle(tab.url),
+      url: tab.url,
+      active: tab.id === activeTabId,
+      pane,
+    };
+  });
+}
+
+function getAiActiveTab(): AiPanelActiveTab | null {
+  const tab = getActiveTab();
+  if (!tab) return null;
+  const internal = canonicalInternalUrl(tab.url);
+  return {
+    title: internal
+      ? tab.title || aiViewLabel(internal)
+      : tab.pageTitle || tab.title || friendlyTabTitle(tab.url),
+    url: tab.url,
+    webview: tab.webview,
+    internal: !!internal,
+    viewLabel: internal ? aiViewLabel(internal) : "",
+  };
+}
+
+function getAiAppState(): AiPanelAppState {
+  const active = getActiveTab();
+  const theme = document.documentElement.getAttribute("data-theme") ?? "light";
+  const accent = getComputedStyle(document.documentElement)
+    .getPropertyValue("--accent")
+    .trim();
+  return {
+    theme,
+    accent,
+    language: currentLang,
+    languageSetting: getSavedLang(),
+    splitView: splitMode,
+    view: active ? aiViewLabel(canonicalInternalUrl(active.url) ?? "") : t.home,
+    customBackground: !!localStorage.getItem("alma:bgImage"),
+    restoreSession: localStorage.getItem("alma:restoreSession") !== "false",
+    windowId: currentWindowId,
+    platform: navigator.platform || "",
+    windowSize: `${window.innerWidth}×${window.innerHeight}`,
+  };
+}
+
+aiApp = initAiPanel({
+  getTabs: getAiTabs,
+  getActiveTab: getAiActiveTab,
+  getAppState: getAiAppState,
+  getLang: () => currentLang,
+  onOpenChange: (open) => {
+    if (!open) return;
+    if (settingsPanel) settingsPanel.style.display = "none";
+    const fp = document.getElementById("favorites-panel");
+    if (fp) fp.style.display = "none";
+    const tp = document.getElementById("themes-panel");
+    if (tp) tp.style.display = "none";
+    const lp = document.getElementById("language-panel");
+    if (lp) lp.style.display = "none";
+  },
+});
+
+searchApp.init({
+  onNavigate: (target: string) => navigateTo(target),
+  onNewTab: (target: string) => createTab(target, true),
 });
 
 // Apply locale on load

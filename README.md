@@ -12,9 +12,13 @@ Alma/
 ├── src/main/main.ts        # Main process: window lifecycle, IPC, multi-window
 ├── src/main/preload.ts     # Preload script: contextBridge expose of almaAPI
 ├── src/renderer/index.html # Renderer UI: toolbar, address bar, home view, webview
-├── src/renderer/home.html  # Custom home page (Alma-branded, Google-powered search)
+├── src/renderer/home.html  # Custom home page (Alma-branded)
+├── src/renderer/search.html# Alma Custom Search shell
+├── src/renderer/search.ts  # Alma Search: native Tavily-powered search engine UI
 ├── src/renderer/renderer.ts# Renderer logic: nav controls, URL resolution, view toggling
 ├── src/renderer/presentations.ts # Alma Presentations: deck editor (slides, canvas, presenter)
+├── src/renderer/calendar.ts     # Alma Calendar: day/week/month views, events, reminders
+├── src/renderer/ai.ts           # Alma AI: chat UI, Markdown, browser-context collection
 ├── src/renderer/styles.css # Toolbar, home page, native apps, theme styling
 ├── src/assets/icons/       # Placeholder SVGs — drop your custom icons here
 │   ├── alma.svg
@@ -39,6 +43,13 @@ swaps the content area between views. Every view follows the same rules:
 | Documents | List page (header + search + grid of documents) and, on click, a full-width editor page |
 | Sheets | Same list-page shell, plus a spreadsheet editor: formula bar, cell grid, sheet tabs |
 | Presentations | Same list-page shell, plus a deck editor: slide filmstrip, 16:9 canvas, formatting toolbar, properties panel, presenter mode |
+| Calendar | Full-screen scheduler: mini month picker, calendar list, month / week / day views, event editor with reminders |
+
+The right-side overlays (Themes, Favorites, Language and Alma AI) share one
+glass panel shell (`.themes-panel`): 400px wide, 20px left corners, the same
+blurred surface, header treatment, 38px controls, focus rings and thin
+scrollbars. The settings menu is a compact dropdown built from the same
+material.
 
 Native apps share the `.docs-page` shell, so adding a new one is a matter of
 copying the header markup. Opening a document swaps the list page for the
@@ -53,6 +64,18 @@ under `alma:sheets`.
 Presentations lives in its own module (`src/renderer/presentations.ts`) and
 persists to `alma:presentations`. `renderer.ts` only drives it through the
 `presentationsApp` facade (`onShow`, `isEditing`, `closeEditor`, `setLang`).
+
+Calendar follows the same pattern in `src/renderer/calendar.ts`, persisted
+under `alma:calendar_events` and `alma:calendar_calendars`, and driven through
+the `calendarApp` facade. It is the only native app without a list page: it
+opens straight onto the schedule.
+
+Alma AI (`src/renderer/ai.ts`) is a right-side overlay, not a tab view. It is
+driven through the `aiApp` facade (`open`, `close`, `setLang`,
+`notifyPageChanged`, `refreshContext`) and talks to the local Ollama model over
+the `ai:status` / `ai:chat` IPC channels. `renderer.ts` passes it lazy getters
+for the tab list, active tab and app state, so the module never reaches into
+renderer internals directly.
 
 ### Internal view history
 
@@ -87,7 +110,7 @@ other page.
 - [x] Renderer with custom title bar, toolbar, address bar, back/forward/reload/home/new window
 - [x] Theme support (light/dark, persisted in localStorage)
 - [x] Custom home page (`src/renderer/home.html`) rendered in the renderer; webview used only for external sites
-- [x] Address bar stays Google-powered (search queries resolve to Google)
+- [x] Address bar resolves search queries to native Alma Search (powered by Tavily)
 - [x] Icon placeholders in `src/assets/icons/`
 
 ### Phase 2 — Multi-window / tab support
@@ -98,7 +121,7 @@ other page.
 
 ### Phase 3 — Navigation & address bar
 - [x] Sync address bar with `did-navigate` / `did-finish-load` / `did-fail-load` webview events
-- [x] Smart URL resolution: bare domains get `https://`, space-separated input becomes a Google search
+- [x] Smart URL resolution: bare domains get `https://`, space-separated input becomes an Alma Search
 - [x] Back/forward enabled state driven by webview history
 - [x] Home button returns to the custom Alma home page
 - [ ] Page title reflected in custom title bar
@@ -136,6 +159,25 @@ other page.
 - [x] Presentations: formatting toolbar and properties panel (position/size, font size, bold/italic/underline, bullets, alignment, text and fill colour, z-order, duplicate, delete), undo/redo, autosave
 - [x] Presentations: presenter mode (fullscreen, arrow keys, progress bar) and export (PDF/HTML/JSON)
 - [ ] Presentations: speaker notes
+- [x] Calendar: day, week and month views over the hours of the day, the days of the week and the months of the year
+- [x] Calendar: event editor (title, date, start/end, all day, calendar, reminder, description) with create, edit and delete
+- [x] Calendar: drag on the time grid to create an event, drag an event to move it (it stays under the cursor), drag its top or bottom edge to resize in either direction, snapped to 15 minutes
+- [x] Calendar: single click opens a details popup (time, calendar, description) with edit and delete; double click opens the full editor
+- [x] Calendar: overlapping events share the column side by side; all-day events sit in their own row
+- [x] Calendar: multiple calendars with colours and visibility toggles, mini month picker, reminders with in-app notifications
+- [ ] Calendar: recurring events, search and multiple time zones
+
+### Phase 7 — Alma AI
+- [x] Slide-over chat panel: status dot, context strip, empty state with suggestions, clear chat
+- [x] Polished message bubbles: user/assistant styling, avatars, timestamps, Markdown (lists, headings, code fences, links, quotes), copy and retry actions
+- [x] Auto-growing composer with Enter-to-send, Shift+Enter newlines, context on/off toggle and per-message busy state
+- [x] Typing indicator, error bubbles with retry, scroll-to-latest affordance, Escape to close
+- [x] Read the active page: title, URL, meta description, language, headings, selected text and readable body text (scripts/nav/footer stripped, truncated to 14k characters)
+- [x] Share the open tabs of the current window, the focused split pane and the real page titles (the tab strip keeps its short site names)
+- [x] Share app state: theme, accent colour, UI language and language setting, current view, split view, custom home background, session-restore setting, window size and platform
+- [x] Context strip shows what will be sent, with an expandable preview and manual refresh; context auto-refreshes on navigation, tab switches and theme/language changes
+- [x] Untrusted page text is delimited in the system prompt with an explicit prompt-injection guard
+- [ ] Alma AI: streaming replies, chat history persistence and tool/actions (navigate, open tabs, change settings)
 
 ## Running
 
@@ -148,8 +190,9 @@ npm run electron
 ## Notes
 
 - The custom home page (`home.html`) is rendered directly in the renderer DOM (not inside `<webview>`) because Electron blocks `file://` navigation inside webview tags for security. External websites load inside `<webview>`.
-- The address bar always resolves to Google for searches, even from the home page.
-- IPC surface: `browser:new-window`, `browser:navigate`, `browser:get-title`, `browser:get-url`, `window:minimize`, `window:maximize`, `window:close`, `window:is-maximized`.
+- The address bar and home search resolve to the native Alma Search interface (`search.html?q=...`), fetching web results, AI overviews, and images via the Tavily API (configured securely via `TAVILY_API_KEY` in `.env`).
+- IPC surface: `browser:new-window`, `browser:navigate`, `browser:get-title`, `browser:get-url`, `browser:search-web`, `window:minimize`, `window:maximize`, `window:close`, `window:is-maximized`, `ai:status`, `ai:chat`.
+- Alma AI runs entirely against a local Ollama instance (`http://127.0.0.1:11434`, model `llama3.2:latest`). Browser context is only sent to that local endpoint, never to a remote service, and the "Context off" pill in the composer keeps even the local model blind to the page. Page text is read with `webview.executeJavaScript()` and is always treated as untrusted data.
 - Drop your custom icons into `src/assets/icons/` and reference them from `index.html` or `styles.css`.
-- Translations live in two places: `src/renderer/locales/index.ts` and the inlined copy at the top of `src/renderer/renderer.ts` (inlined because the renderer is loaded as a plain ES module). Keep both in sync when adding a string. `src/renderer/presentations.ts` keeps its own string table for the deck editor.
+- Translations live in two places: `src/renderer/locales/index.ts` and the inlined copy at the top of `src/renderer/renderer.ts` (inlined because the renderer is loaded as a plain ES module). Keep both in sync when adding a string. `src/renderer/presentations.ts` and `src/renderer/ai.ts` keep their own string tables for the deck editor and the AI panel.
 - The native app names (Documents, Sheets, Presentations) are proper nouns and stay in English in every language.

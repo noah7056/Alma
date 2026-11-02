@@ -1,5 +1,34 @@
 import { contextBridge, ipcRenderer } from "electron";
 
+interface AiChatContext {
+  url?: string;
+  title?: string;
+  page?: {
+    description?: string;
+    lang?: string;
+    contentType?: string;
+    text?: string;
+    truncated?: boolean;
+    wordCount?: number;
+    selection?: string;
+    headings?: string[];
+  };
+  tabs?: { title?: string; url?: string; active?: boolean; pane?: string }[];
+  app?: {
+    theme?: string;
+    accent?: string;
+    language?: string;
+    languageSetting?: string;
+    splitView?: boolean;
+    view?: string;
+    customBackground?: boolean;
+    restoreSession?: boolean;
+    windowId?: number | null;
+    platform?: string;
+    windowSize?: string;
+  };
+}
+
 contextBridge.exposeInMainWorld("almaAPI", {
   newWindow: (url?: string) => ipcRenderer.invoke("browser:new-window", url),
   navigate: (url: string) => ipcRenderer.invoke("browser:navigate", url),
@@ -10,9 +39,14 @@ contextBridge.exposeInMainWorld("almaAPI", {
   canGoForward: () => ipcRenderer.invoke("browser:can-go-forward"),
   getTitle: () => ipcRenderer.invoke("browser:get-title"),
   getURL: () => ipcRenderer.invoke("browser:get-url"),
+  searchWeb: (query: string, limit?: number) => ipcRenderer.invoke("browser:search-web", query, limit),
+  searchMoreImages: (query: string, page?: number) => ipcRenderer.invoke("browser:search-more-images", query, page),
   openExternal: (url: string) => {
     void ipcRenderer.send("browser:open-external", url);
   },
+  aiStatus: () => ipcRenderer.invoke("ai:status"),
+  aiChat: (messages: { role: string; content: string }[], context?: AiChatContext) =>
+    ipcRenderer.invoke("ai:chat", messages, context),
   onNavigateTo: (callback: (url: string) => void) => {
     const channel = "browser:navigate-to";
     const handler = (_: unknown, url: string) => callback(url);
@@ -62,6 +96,10 @@ contextBridge.exposeInMainWorld("almaAPI", {
   showAddressContextMenu: (data?: { hasSelection?: boolean }) => {
     ipcRenderer.send("context-menu:show-address-bar", data);
   },
+  showSearchImageContextMenu: (options: { imageUrl: string; sourceUrl?: string } | string) => {
+    ipcRenderer.send("context-menu:show-search-image", options);
+  },
+  downloadUrl: (url: string) => ipcRenderer.invoke("browser:download-url", url),
   onNewTab: (callback: (data: { url: string; makeActive?: boolean; insertAfterTabId?: number }) => void) => {
     const channel = "browser:new-tab";
     const handler = (_: unknown, data: { url: string; makeActive?: boolean; insertAfterTabId?: number }) => callback(data);
@@ -108,7 +146,11 @@ declare global {
     canGoForward: () => Promise<boolean>;
     getTitle: () => Promise<string | null>;
     getURL: () => Promise<string | null>;
+    searchWeb: (query: string, limit?: number) => Promise<{ success: boolean; results?: { title: string; url: string; content: string; score: number }[]; images?: { url: string; title?: string; description?: string }[]; answer?: string; error?: string }>;
+    searchMoreImages: (query: string, page?: number) => Promise<{ success: boolean; images?: { url: string; title?: string; description?: string }[]; error?: string }>;
     openExternal: (url: string) => void;
+    aiStatus: () => Promise<{ success: boolean; models?: string[]; hasModel?: boolean; error?: string }>;
+    aiChat: (messages: { role: string; content: string }[], context?: AiChatContext) => Promise<{ success: boolean; reply?: string; error?: string }>;
     onNavigateTo: (callback: (url: string) => void) => () => void;
     notifyDragStart: (payload: unknown) => void;
     notifyDragEnd: () => void;
@@ -127,6 +169,8 @@ declare global {
     showTabContextMenu: (data: { tabId: number; canCloseOthers: boolean; canCloseRight: boolean }) => void;
     showTabStripContextMenu: (data: { canReopen: boolean }) => void;
     showAddressContextMenu: (data?: { hasSelection?: boolean }) => void;
+    showSearchImageContextMenu: (options: { imageUrl: string; sourceUrl?: string } | string) => void;
+    downloadUrl: (url: string) => Promise<boolean>;
     onNewTab: (callback: (data: { url: string; makeActive?: boolean; insertAfterTabId?: number }) => void) => () => void;
     onTabAction: (callback: (action: string, tabId?: number) => void) => () => void;
     onAddressAction: (callback: (action: string, payload?: any) => void) => () => void;
