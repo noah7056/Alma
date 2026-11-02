@@ -3671,16 +3671,22 @@ img {
    ============================================================ */
 
 .cal-view {
+  align-items: stretch !important;
+  justify-content: stretch !important;
+  overflow: hidden !important;
   background: var(--bg);
 }
 
 .cal-shell {
   position: relative;
   flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 /* ---- Header ---- */
@@ -3838,12 +3844,14 @@ img {
   min-height: 0;
   display: flex;
   align-items: stretch;
+  overflow: hidden;
 }
 
 .cal-sidebar {
   width: 210px;
   flex-shrink: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 14px 12px;
   border-right: 1px solid var(--border);
   background: var(--bg);
@@ -4012,19 +4020,23 @@ img {
 .cal-month {
   flex: 1 1 auto;
   min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .cal-month-head {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   border-bottom: 1px solid var(--border);
+  background: var(--bg);
   flex-shrink: 0;
+  z-index: 2;
 }
 
 .cal-month-head-cell {
-  padding: 8px 10px;
+  padding: 9px 12px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.6px;
@@ -4038,19 +4050,23 @@ img {
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  grid-template-rows: repeat(6, minmax(0, 1fr));
+  grid-template-rows: repeat(6, minmax(110px, 1fr));
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .cal-month-cell {
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-  padding: 3px 5px 4px;
+  padding: 5px 6px 5px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   cursor: pointer;
-  min-height: 0;
+  min-height: 110px;
+  box-sizing: border-box;
+  background: var(--bg);
 }
 
 .cal-month-cell:nth-child(7n) {
@@ -4069,17 +4085,18 @@ img {
   display: flex;
   justify-content: flex-start;
   flex-shrink: 0;
+  margin-bottom: 1px;
 }
 
 .cal-daynum {
-  min-width: 21px;
-  height: 21px;
-  padding: 0 5px;
-  border-radius: 11px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--text);
 }
@@ -4091,14 +4108,17 @@ img {
 .cal-month-cell.today .cal-daynum {
   background: var(--tint);
   color: #fff;
+  font-weight: 700;
 }
 
 .cal-month-events {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
+  flex: 1 1 auto;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .cal-chip {
@@ -4164,8 +4184,10 @@ img {
 .cal-time {
   flex: 1 1 auto;
   min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .cal-time-heads,
@@ -4231,6 +4253,29 @@ img {
   display: flex;
   align-items: flex-start;
   padding-top: 7px;
+}
+
+.cal-month-grid::-webkit-scrollbar,
+.cal-month-events::-webkit-scrollbar,
+.cal-time-body::-webkit-scrollbar,
+.cal-sidebar::-webkit-scrollbar {
+  width: 7px;
+}
+
+.cal-month-grid::-webkit-scrollbar-thumb,
+.cal-month-events::-webkit-scrollbar-thumb,
+.cal-time-body::-webkit-scrollbar-thumb,
+.cal-sidebar::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-secondary) 28%, transparent);
+  border-radius: 7px;
+  border: 1.5px solid transparent;
+  background-clip: padding-box;
+}
+
+.cal-month-grid::-webkit-scrollbar-thumb:hover,
+.cal-time-body::-webkit-scrollbar-thumb:hover,
+.cal-sidebar::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text-secondary) 48%, transparent);
 }
 
 .cal-time-gutter {
