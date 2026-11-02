@@ -70,6 +70,12 @@
               </span>
               <span class="app-name">Presentations</span>
             </button>
+            <button class="app-item" data-app="calendar">
+              <span class="app-icon-wrapper">
+                <img src="assets/icons/calendar-icon.svg" alt="" />
+              </span>
+              <span class="app-name">Calendar</span>
+            </button>
           </div>
         </div>
       </div>
@@ -696,7 +702,110 @@
         </footer>
       </section>
     </div>
+    <div id="calendar-view" class="home-view cal-view" style="display:none;">
+      <div class="cal-shell">
+        <header class="cal-header">
+          <div class="cal-header-left">
+            <button id="cal-create-btn" class="cal-create-btn">
+              <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+              <span id="cal-create-btn-label">Create</span>
+            </button>
+            <button id="cal-today-btn" class="cal-today-btn">Today</button>
+            <div class="cal-nav-group">
+              <button id="cal-prev-btn" class="cal-nav-btn" aria-label="Previous">
+                <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+              </button>
+              <button id="cal-next-btn" class="cal-nav-btn" aria-label="Next">
+                <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+              </button>
+            </div>
+            <h2 id="cal-title" class="cal-title"></h2>
+          </div>
+          <div class="cal-header-right">
+            <div id="cal-view-switch" class="cal-view-switch">
+              <button data-cal-view="day">Day</button>
+              <button data-cal-view="week">Week</button>
+              <button data-cal-view="month" class="active">Month</button>
+            </div>
+          </div>
+        </header>
+        <div class="cal-body">
+          <aside class="cal-sidebar">
+            <div id="cal-mini" class="cal-mini"></div>
+            <div class="cal-calendars-wrap">
+              <div id="cal-calendars-title" class="cal-side-title">My calendars</div>
+              <div id="cal-calendars" class="cal-list"></div>
+            </div>
+          </aside>
+          <main id="cal-main" class="cal-main"></main>
+        </div>
+      </div>
+      <div id="cal-event-peek" class="cal-peek" style="display:none;">
+        <button id="cal-peek-close" class="cal-peek-close" aria-label="Close">&times;</button>
+        <div id="cal-peek-title" class="cal-peek-title"></div>
+        <div id="cal-peek-when" class="cal-peek-when"></div>
+        <div class="cal-peek-cal">
+          <span id="cal-peek-swatch" class="cal-swatch"></span>
+          <span id="cal-peek-calendar"></span>
+        </div>
+        <div id="cal-peek-desc" class="cal-peek-desc"></div>
+        <div class="cal-peek-actions">
+          <button id="cal-peek-edit" class="cal-peek-btn">Edit</button>
+          <button id="cal-peek-delete" class="cal-peek-btn danger">Delete</button>
+        </div>
+      </div>
+    </div>
   </div>
+
+  <div id="cal-event-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-card cal-event-card">
+      <div class="modal-header">
+        <span class="modal-title" id="cal-event-modal-title">New event</span>
+        <button id="cal-event-close" class="themes-close" aria-label="Close">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-field">
+          <input type="text" id="cal-event-title" class="modal-input cal-event-title-input" placeholder="Add title" />
+        </div>
+        <div class="cal-event-when">
+          <div class="cal-event-row">
+            <input type="date" id="cal-event-date" class="modal-input cal-date-input" />
+            <input type="time" id="cal-event-start" class="modal-input cal-time-input" />
+            <span class="cal-event-dash">&ndash;</span>
+            <input type="time" id="cal-event-end" class="modal-input cal-time-input" />
+          </div>
+          <label class="cal-check">
+            <input type="checkbox" id="cal-event-allday" />
+            <span>All day</span>
+          </label>
+        </div>
+        <div class="modal-field">
+          <select id="cal-event-calendar" class="modal-input"></select>
+        </div>
+        <div class="modal-field">
+          <select id="cal-event-reminder" class="modal-input">
+            <option value="">No reminder</option>
+            <option value="5">5 minutes before</option>
+            <option value="10">10 minutes before</option>
+            <option value="15">15 minutes before</option>
+            <option value="30">30 minutes before</option>
+            <option value="60">1 hour before</option>
+            <option value="1440">1 day before</option>
+          </select>
+        </div>
+        <div class="modal-field">
+          <textarea id="cal-event-description" class="modal-input cal-event-description" placeholder="Description"></textarea>
+        </div>
+      </div>
+      <div class="modal-actions cal-event-actions">
+        <button id="cal-event-delete" class="modal-btn cal-delete-btn" style="display:none;">Delete</button>
+        <div class="cal-actions-spacer"></div>
+        <button id="cal-event-cancel" class="modal-btn secondary">Cancel</button>
+        <button id="cal-event-save" class="modal-btn primary">Save</button>
+      </div>
+    </div>
+  </div>
+  <div id="cal-toasts" class="cal-toasts"></div>
 
   <div id="settings-panel" class="settings-panel" style="display:none;">
     <button id="open-history" class="settings-btn">History</button>

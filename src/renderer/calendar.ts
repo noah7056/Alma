@@ -1340,7 +1340,7 @@ function setupUI(): void {
       saveEventFromEditor();
     }
   });
-  el("cal-event-alllday")?.addEventListener("change", () => {
+  el("cal-event-allday")?.addEventListener("change", () => {
     const allDay = el<HTMLInputElement>("cal-event-allday")?.checked;
     const startInput = el<HTMLInputElement>("cal-event-start");
     const endInput = el<HTMLInputElement>("cal-event-end");
